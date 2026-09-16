@@ -19,6 +19,7 @@ from agent_optimize.ingestion.otlp_receiver import router as otlp_router
 from agent_optimize.ingestion.otlp_receiver import set_normalizer, set_trace_callback
 from agent_optimize.models.traces import NormalizedTrace
 from agent_optimize.optimization.engine import OptimizationEngine
+from agent_optimize.optimization.recommendation_store import RecommendationStore
 from agent_optimize.optimization.replay import ReplayEngine
 from agent_optimize.warehouse.store import TraceWarehouse
 
@@ -38,6 +39,8 @@ class AppState:
         )
         self.optimization_engine = OptimizationEngine()
         self.replay_engine = ReplayEngine()
+        # V2: Recommendation lifecycle store
+        self.recommendation_store = RecommendationStore()
 
 
 @asynccontextmanager
@@ -61,7 +64,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
-    logger.info("app.shutdown", traces_stored=state.warehouse.trace_count)
+    logger.info(
+        "app.shutdown",
+        traces_stored=state.warehouse.trace_count,
+        recommendations=state.recommendation_store.count,
+    )
     set_state(None)
 
 
@@ -93,7 +100,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app = FastAPI(
         title="AgentOptimize",
         description="AI-agent FinOps: waste attribution, counterfactual optimization, and quality preservation.",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -107,11 +114,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
 
     # Mount routes — imported here to avoid circular imports
-    from agent_optimize.api.routes import dashboard, health, traces
+    from agent_optimize.api.routes import dashboard, experiments, health, recommendations, traces
 
     app.include_router(health.router)
     app.include_router(otlp_router)
     app.include_router(traces.router)
     app.include_router(dashboard.router)
+    # V2 routes
+    app.include_router(recommendations.router)
+    app.include_router(experiments.router)
 
     return app

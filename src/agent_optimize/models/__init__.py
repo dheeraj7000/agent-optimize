@@ -1,5 +1,17 @@
 """Core data models for AgentOptimize."""
 
+from agent_optimize.models.recommendations import (
+    ConfidenceScore,
+    ConfigComparison,
+    ConfigSnapshot,
+    EvidenceChain,
+    EvidenceItem,
+    ImpactProjection,
+    Recommendation,
+    RecommendationPriority,
+    RecommendationStatus,
+    RecommendationSummary,
+)
 from agent_optimize.models.traces import (
     CostBreakdown,
     ModelCallSpan,
@@ -22,12 +34,22 @@ from agent_optimize.models.waste import (
 
 __all__ = [
     "ConfidenceLevel",
+    "ConfidenceScore",
+    "ConfigComparison",
+    "ConfigSnapshot",
     "CostBreakdown",
+    "EvidenceChain",
+    "EvidenceItem",
+    "ImpactProjection",
     "ModelCallSpan",
     "NormalizedSpan",
     "NormalizedTrace",
     "Opportunity",
     "OpportunityDashboard",
+    "Recommendation",
+    "RecommendationPriority",
+    "RecommendationStatus",
+    "RecommendationSummary",
     "RunSummary",
     "SpanKind",
     "SpanStatus",
