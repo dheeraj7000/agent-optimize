@@ -10,6 +10,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent_optimize.api.state import get_state, set_state
+from agent_optimize.autopilot.policy import PolicyEngine
+from agent_optimize.autopilot.recovery import RecoverySelector
+from agent_optimize.autopilot.router import ModelRouter
+from agent_optimize.autopilot.verification import AdaptiveVerifier
 from agent_optimize.config import AppConfig, load_config
 from agent_optimize.cost.analyzer import CostAnalyzer
 from agent_optimize.cost.catalog import CostCatalog
@@ -48,6 +52,11 @@ class AppState:
         self.savings_validator = SavingsValidator(self.evaluator_registry)
         self.canary_manager = CanaryManager(self.savings_validator)
         self.proof_store: dict = {}  # proof_id -> SavingsProof
+        # V4: Autopilot — dynamic routing, adaptive verification, recovery
+        self.policy_engine = PolicyEngine()
+        self.model_router = ModelRouter()
+        self.adaptive_verifier = AdaptiveVerifier()
+        self.recovery_selector = RecoverySelector()
 
 
 @asynccontextmanager
@@ -68,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         detectors=len(state.detector_registry.list_detectors()),
         evaluators=len(state.evaluator_registry.list_evaluators()),
         providers=state.cost_catalog.list_providers(),
+        autopilot_mode=state.policy_engine.status.mode.value,
     )
 
     yield
@@ -77,6 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         traces_stored=state.warehouse.trace_count,
         recommendations=state.recommendation_store.count,
         proofs=len(state.proof_store),
+        autopilot_decisions=state.policy_engine.status.decisions_made,
     )
     set_state(None)
 
@@ -109,7 +120,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app = FastAPI(
         title="AgentOptimize",
         description="AI-agent FinOps: waste attribution, counterfactual optimization, and quality preservation.",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
 
@@ -124,6 +135,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     # Mount routes — imported here to avoid circular imports
     from agent_optimize.api.routes import (
+        autopilot,
         dashboard,
         experiments,
         health,
@@ -141,5 +153,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(experiments.router)
     # V3 routes
     app.include_router(validation.router)
+    # V4 routes
+    app.include_router(autopilot.router)
 
     return app
