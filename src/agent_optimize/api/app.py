@@ -14,6 +14,7 @@ from agent_optimize.config import AppConfig, load_config
 from agent_optimize.cost.analyzer import CostAnalyzer
 from agent_optimize.cost.catalog import CostCatalog
 from agent_optimize.detectors import create_default_registry
+from agent_optimize.evaluation.registry import create_default_evaluator_registry
 from agent_optimize.ingestion.normalizer import TraceNormalizer
 from agent_optimize.ingestion.otlp_receiver import router as otlp_router
 from agent_optimize.ingestion.otlp_receiver import set_normalizer, set_trace_callback
@@ -21,6 +22,7 @@ from agent_optimize.models.traces import NormalizedTrace
 from agent_optimize.optimization.engine import OptimizationEngine
 from agent_optimize.optimization.recommendation_store import RecommendationStore
 from agent_optimize.optimization.replay import ReplayEngine
+from agent_optimize.optimization.validator import CanaryManager, SavingsValidator
 from agent_optimize.warehouse.store import TraceWarehouse
 
 logger = structlog.get_logger()
@@ -41,6 +43,11 @@ class AppState:
         self.replay_engine = ReplayEngine()
         # V2: Recommendation lifecycle store
         self.recommendation_store = RecommendationStore()
+        # V3: Evaluation, validation, and canary monitoring
+        self.evaluator_registry = create_default_evaluator_registry()
+        self.savings_validator = SavingsValidator(self.evaluator_registry)
+        self.canary_manager = CanaryManager(self.savings_validator)
+        self.proof_store: dict = {}  # proof_id -> SavingsProof
 
 
 @asynccontextmanager
@@ -59,6 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "app.started",
         warehouse_backend=config.warehouse.backend,
         detectors=len(state.detector_registry.list_detectors()),
+        evaluators=len(state.evaluator_registry.list_evaluators()),
         providers=state.cost_catalog.list_providers(),
     )
 
@@ -68,6 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "app.shutdown",
         traces_stored=state.warehouse.trace_count,
         recommendations=state.recommendation_store.count,
+        proofs=len(state.proof_store),
     )
     set_state(None)
 
@@ -100,7 +109,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app = FastAPI(
         title="AgentOptimize",
         description="AI-agent FinOps: waste attribution, counterfactual optimization, and quality preservation.",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
 
@@ -114,7 +123,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
 
     # Mount routes — imported here to avoid circular imports
-    from agent_optimize.api.routes import dashboard, experiments, health, recommendations, traces
+    from agent_optimize.api.routes import (
+        dashboard,
+        experiments,
+        health,
+        recommendations,
+        traces,
+        validation,
+    )
 
     app.include_router(health.router)
     app.include_router(otlp_router)
@@ -123,5 +139,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # V2 routes
     app.include_router(recommendations.router)
     app.include_router(experiments.router)
+    # V3 routes
+    app.include_router(validation.router)
 
     return app
