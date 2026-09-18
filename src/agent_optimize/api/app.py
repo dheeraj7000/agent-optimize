@@ -64,18 +64,34 @@ class AppState:
         )
         self.optimization_engine = OptimizationEngine()
         self.replay_engine = ReplayEngine()
-        # V2: Recommendation lifecycle store
-        self.recommendation_store = RecommendationStore()
+        # V2: Recommendation store — SQLite or in-memory
+        self.recommendation_store = _create_recommendation_store(self.db)
         # V3: Evaluation, validation, and canary monitoring
         self.evaluator_registry = create_default_evaluator_registry()
         self.savings_validator = SavingsValidator(self.evaluator_registry)
         self.canary_manager = CanaryManager(self.savings_validator)
-        self.proof_store: dict = {}  # proof_id -> SavingsProof
+        self.proof_store = _create_proof_store(self.db)
         # V4: Autopilot
         self.policy_engine = PolicyEngine()
         self.model_router = ModelRouter()
         self.adaptive_verifier = AdaptiveVerifier()
         self.recovery_selector = RecoverySelector()
+
+
+def _create_recommendation_store(db):
+    """SQLite-backed when DB available, in-memory otherwise."""
+    if db is not None:
+        from agent_optimize.storage.recommendation_store_sql import SqliteRecommendationStore
+        return SqliteRecommendationStore(db)
+    return RecommendationStore()
+
+
+def _create_proof_store(db):
+    """SQLite-backed dict-like proof store when DB available, plain dict otherwise."""
+    if db is not None:
+        from agent_optimize.storage.proof_store_sql import SqliteProofStore
+        return SqliteProofStore(db)
+    return {}
 
 
 @asynccontextmanager
@@ -106,7 +122,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "app.shutdown",
         traces_stored=state.warehouse.trace_count,
         recommendations=state.recommendation_store.count,
-        proofs=len(state.proof_store),
+        proofs=state.proof_store.count if hasattr(state.proof_store, 'count') else len(state.proof_store),
         autopilot_decisions=state.policy_engine.status.decisions_made,
     )
     set_state(None)
