@@ -186,4 +186,43 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(validation.router)
     app.include_router(autopilot.router)
 
+    # Serve dashboard SPA static files if the build directory exists
+    _mount_dashboard(app)
+
     return app
+
+
+def _mount_dashboard(app: FastAPI) -> None:
+    """Mount the React dashboard build as static files with SPA fallback."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    # Look for dashboard build in common locations
+    candidates = [
+        Path(__file__).parent.parent.parent.parent / "dashboard" / "dist",
+        Path("/app/dashboard/dist"),
+        Path("dashboard/dist"),
+    ]
+    dist_dir = next((p for p in candidates if p.is_dir()), None)
+
+    if dist_dir is None:
+        logger.info("dashboard.not_found", hint="Run 'npm run build' in dashboard/")
+        return
+
+    # Serve static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="dashboard-assets")
+
+    # SPA fallback: serve index.html for all non-API routes
+    index_html = dist_dir / "index.html"
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa_fallback(path: str) -> FileResponse:
+        # If the file exists in dist, serve it; otherwise serve index.html
+        file_path = dist_dir / path
+        if file_path.is_file() and ".." not in path:
+            return FileResponse(str(file_path))
+        return FileResponse(str(index_html))
+
+    logger.info("dashboard.mounted", path=str(dist_dir))
