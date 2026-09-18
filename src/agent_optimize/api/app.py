@@ -24,10 +24,12 @@ from agent_optimize.ingestion.normalizer import TraceNormalizer
 from agent_optimize.ingestion.otlp_receiver import router as otlp_router
 from agent_optimize.ingestion.otlp_receiver import set_normalizer, set_trace_callback
 from agent_optimize.models.traces import NormalizedTrace
+from agent_optimize.onboarding.service import OnboardingService
 from agent_optimize.optimization.engine import OptimizationEngine
 from agent_optimize.optimization.recommendation_store import RecommendationStore
 from agent_optimize.optimization.replay import ReplayEngine
 from agent_optimize.optimization.validator import CanaryManager, SavingsValidator
+from agent_optimize.webhooks.events import EventBus, WebhookDispatcher
 
 logger = structlog.get_logger()
 
@@ -76,6 +78,11 @@ class AppState:
         self.model_router = ModelRouter()
         self.adaptive_verifier = AdaptiveVerifier()
         self.recovery_selector = RecoverySelector()
+        # Webhooks and events
+        self.webhook_dispatcher = WebhookDispatcher()
+        self.event_bus = EventBus(self.webhook_dispatcher)
+        # Onboarding
+        self.onboarding = OnboardingService()
 
 
 def _create_recommendation_store(db):
@@ -188,10 +195,17 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         dashboard,
         experiments,
         health,
+        metrics_route,
+        onboarding_route,
         recommendations,
         traces,
         validation,
+        webhooks,
     )
+
+    # Metrics middleware (no-op if prometheus_client not installed)
+    from agent_optimize.metrics.prometheus import MetricsMiddleware
+    app.add_middleware(MetricsMiddleware)
 
     app.include_router(health.router)
     app.include_router(otlp_router)
@@ -201,6 +215,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(experiments.router)
     app.include_router(validation.router)
     app.include_router(autopilot.router)
+    app.include_router(webhooks.router)
+    app.include_router(metrics_route.router)
+    app.include_router(onboarding_route.router)
 
     # Serve dashboard SPA static files if the build directory exists
     _mount_dashboard(app)
