@@ -2,6 +2,8 @@
 
 **Observe. Diagnose. Optimize. Prove.**
 
+[![CI](https://github.com/dheeraj7000/agent-optimize/actions/workflows/ci.yml/badge.svg)](https://github.com/dheeraj7000/agent-optimize/actions/workflows/ci.yml)
+
 A framework-agnostic optimization layer for production AI agents. AgentOptimize uses OpenTelemetry traces to identify inefficient model calls, context growth, retries, tool usage, and agent topology — then validates lower-cost configurations against historical workloads before production deployment.
 
 ## Core Promise
@@ -15,29 +17,24 @@ OpenTelemetry
   |
 Telemetry Normalizer
   |
-Trace Warehouse
+Trace Warehouse (SQLite / in-memory)
   |
   +--> Cost Analyzer
   +--> Path / Critical-Path Analyzer
-  +--> Quality Engine
+  +--> Quality Engine (6 evaluators)
   |
 Waste Detectors (7 built-in)
-  |-- model overprovisioning
-  |-- context duplication
-  |-- retry waste
-  |-- unnecessary verification
-  |-- redundant tool calls
-  |-- bad routing
-  |-- serialization waste
   |
 Optimization Engine
   |
 Recommendations (with lifecycle)
   pending → accepted → replaying → validated → deployed → verified
   |
-Replay Experiments
+Counterfactual Replay → Savings Proof → Canary Monitor
   |
-Opportunity Dashboard
+Autopilot (policy engine + model router + adaptive verifier + recovery selector)
+  |
+React Dashboard
 ```
 
 ## Quick Start
@@ -46,32 +43,46 @@ Opportunity Dashboard
 # Install
 pip install -e ".[dev]"
 
-# Run the server
+# Run the server (in-memory mode — no setup needed)
 agent-optimize serve
 
-# Or with Docker Compose (includes OTel collector)
-docker compose up
+# Dashboard at http://localhost:8080
+# API docs at http://localhost:8080/docs
+# OTLP endpoint at http://localhost:8080/v1/traces
 ```
 
-The server exposes:
-- **OTLP endpoint**: `POST /v1/traces` — send OpenTelemetry traces here
-- **Dashboard API**: `GET /api/dashboard/opportunities` — executive opportunity view
-- **Recommendations**: `GET /api/recommendations` — actionable optimizations
-- **API docs**: `GET /docs` — interactive Swagger UI
-
-## Configuration
-
-Copy and edit the example config:
+### With persistent storage
 
 ```bash
-cp config.example.yaml config.yaml
+# Use SQLite for traces, recommendations, proofs (survives restarts)
+export AGENTOPTIMIZE_DB_PATH=./data/agentoptimize.db
+agent-optimize serve
 ```
 
-The config controls model pricing, detector thresholds, privacy settings, and warehouse retention. See `config.example.yaml` for all options.
+### With Docker
 
-## API Overview
+```bash
+# Development (with OTel Collector sidecar)
+docker compose up
 
-### Observe (V0)
+# Production
+docker build -f Dockerfile.production -t agentoptimize .
+docker run -v data:/data -p 8080:8080 -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db agentoptimize
+```
+
+### Dashboard development
+
+```bash
+cd dashboard
+npm install
+npm run dev    # Hot reload at http://localhost:5173, proxies API to :8080
+npm run build  # Production build served by FastAPI
+```
+
+## API Overview (60 endpoints)
+
+### V0 — Observe
+
 | Endpoint | Description |
 |----------|-------------|
 | `POST /v1/traces` | OTLP/HTTP trace ingestion |
@@ -81,31 +92,51 @@ The config controls model pricing, detector thresholds, privacy settings, and wa
 | `GET /api/dashboard/stats` | Aggregate statistics |
 | `GET /api/dashboard/runs` | Lightweight run summaries |
 
-### Diagnose (V1)
+### V1 — Diagnose
+
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/traces/{id}/waste` | Waste detection report for a trace |
 | `GET /api/dashboard/opportunities` | Executive opportunity dashboard |
 
-### Optimize (V2)
+### V2 — Optimize
+
 | Endpoint | Description |
 |----------|-------------|
-| `POST /api/recommendations/generate` | Generate recommendations from current traces |
-| `GET /api/recommendations` | List recommendations (filter by status, category, priority) |
-| `GET /api/recommendations/stats` | Aggregate savings by status, priority, category |
-| `GET /api/recommendations/{id}` | Full detail: impact, evidence, confidence, config comparison |
-| `POST /api/recommendations/{id}/accept` | Accept a recommendation |
-| `POST /api/recommendations/{id}/reject` | Reject a recommendation |
-| `POST /api/recommendations/{id}/deploy` | Mark as deployed |
-| `POST /api/recommendations/{id}/verify` | Confirm savings post-deploy |
-| `POST /api/recommendations/{id}/rollback` | Roll back due to regression |
-| `POST /api/experiments` | Create a replay experiment |
+| `POST /api/recommendations/generate` | Generate recommendations from traces |
+| `GET /api/recommendations` | List (filter by status, category, priority) |
+| `GET /api/recommendations/stats` | Aggregate savings by status/priority/category |
+| `GET /api/recommendations/{id}` | Full detail: impact, evidence, confidence, config |
+| `POST /api/recommendations/{id}/accept\|reject\|deploy\|verify\|rollback` | Lifecycle transitions |
+| `POST /api/experiments` | Create replay experiment |
 | `POST /api/experiments/{id}/run` | Run projection-based replay |
-| `GET /api/experiments/{id}` | Get experiment results |
+
+### V3 — Prove
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/validation/evaluators` | List quality evaluators |
+| `POST /api/validation/prove` | Validate savings from replay |
+| `GET /api/validation/proofs` | List savings proofs |
+| `POST /api/validation/canaries` | Create canary deployment |
+| `POST /api/validation/canaries/{id}/start\|checkpoint\|complete` | Canary lifecycle |
+
+### V4 — Autopilot
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/autopilot/status` | Mode, stats, component health |
+| `POST /api/autopilot/mode` | Set mode (off/suggest/supervised/autonomous) |
+| `POST /api/autopilot/constraints` | Set quality/SLA/risk guardrails |
+| `POST /api/autopilot/route` | Get model routing decision |
+| `POST /api/autopilot/verify` | Get adaptive verification decision |
+| `POST /api/autopilot/recover` | Get recovery decision |
+| `GET /api/autopilot/decisions` | List recent decisions |
+| `POST /api/autopilot/decisions/{id}/approve\|reject` | Approve/reject (supervised mode) |
 
 ## Waste Detectors
 
-AgentOptimize ships with 7 money-leak detectors:
+7 built-in money-leak detectors, each producing evidence-backed detections:
 
 1. **Model overprovisioning** — frontier models used for low-complexity calls
 2. **Context duplication** — growing input tokens with low novelty across multi-turn calls
@@ -113,13 +144,20 @@ AgentOptimize ships with 7 money-leak detectors:
 4. **Unnecessary verification** — verification on simple successful runs
 5. **Redundant tool calls** — duplicate tool calls detected by input hash
 6. **Bad routing** — every call goes to the same premium model
-7. **Serialization waste** — independent spans running serially instead of in parallel
+7. **Serialization waste** — independent spans running serially
 
-Each detection includes confidence level, dollar estimates, evidence, and a recommended action.
+## Quality Evaluators
+
+6 evaluators guard every optimization:
+
+1. **Success rate** — min threshold + max regression from baseline
+2. **Latency SLA** — P95 stays within bounds
+3. **Cost bounds** — candidate actually saves money
+4. **Error rate** — error rate doesn't exceed limits
+5. **Statistical quality** — Z-test on success rate regression
+6. **Model-based quality** — LLM-as-judge stub (requires provider config)
 
 ## Recommendation Lifecycle
-
-Recommendations move through a managed lifecycle:
 
 ```
 pending → accepted → replaying → validated → deployed → verified
@@ -127,39 +165,85 @@ pending → accepted → replaying → validated → deployed → verified
 ```
 
 Each recommendation includes:
-- **Impact projection**: cost, quality, latency, reliability, and risk across five dimensions
-- **Confidence score**: sample size, workload coverage, variance, evaluator agreement, drift risk
-- **Evidence chain**: statistical summary + trace samples with structured payloads
-- **Config comparison**: side-by-side current vs. proposed configuration
-- **Business value score**: composite ranking (0-100) for prioritization
-- **Action items**: step-by-step implementation guide per waste category
+- **Impact projection**: cost, quality, latency, reliability, and risk
+- **Confidence score**: sample size, workload coverage, variance, evaluator agreement
+- **Evidence chain**: statistical summary + trace samples
+- **Config comparison**: side-by-side current vs. proposed
+- **Business value score**: composite ranking (0-100)
+- **Action items**: step-by-step implementation guide
+
+## Autopilot
+
+4 operating modes: `off → suggest → supervised → autonomous`
+
+- **Policy engine**: customer-defined constraints (quality, latency, cost, reliability, risk)
+- **Model router**: complexity/risk classification → 3-tier model routing
+- **Adaptive verifier**: skip verification when risk is low and confidence is high
+- **Recovery selector**: learned fallback strategies that minimize cost-to-success
+
+## Configuration
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+### Environment Variables
+
+```bash
+AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db  # SQLite path (omit for in-memory)
+AGENTOPTIMIZE_API_KEY_REQUIRED=true            # Enable API key auth
+AGENTOPTIMIZE_LOG_FORMAT=json                  # json or console
+AGENTOPTIMIZE_LOG_LEVEL=info                   # debug, info, warning, error
+AGENTOPTIMIZE_CORS_ORIGINS=*                   # Comma-separated origins
+```
+
+## Deployment
+
+### Fly.io (~$2/month)
+
+```bash
+fly launch --copy-config --no-deploy
+fly volumes create agentoptimize_data --size 1
+fly deploy
+```
+
+### Self-hosted ($0)
+
+```bash
+docker build -f Dockerfile.production -t agentoptimize .
+docker run -d -p 8080:8080 -v ./data:/data \
+  -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db \
+  agentoptimize
+```
+
+## Testing
+
+```bash
+pip install -e ".[dev]"
+python -m pytest tests/ -v       # 103 tests
+python -m ruff check src/        # Linting
+```
 
 ## Project Structure
 
 ```
 src/agent_optimize/
-├── models/
-│   ├── traces.py              # NormalizedSpan, NormalizedTrace, RunSummary
-│   ├── waste.py               # WasteDetection, WasteReport, Opportunity
-│   └── recommendations.py     # Recommendation, EvidenceChain, ConfidenceScore, ImpactProjection
-├── ingestion/
-│   ├── normalizer.py          # OTel GenAI conventions → internal schema
-│   └── otlp_receiver.py       # OTLP/HTTP endpoint
-├── warehouse/
-│   └── store.py               # In-memory trace warehouse
-├── cost/
-│   ├── catalog.py             # Provider/model pricing
-│   └── analyzer.py            # Per-span cost attribution
+├── models/                    # Data models (traces, waste, recommendations, proofs)
+├── ingestion/                 # OTel normalizer + OTLP/HTTP receiver
+├── warehouse/                 # In-memory trace warehouse
+├── storage/                   # SQLite persistence (traces, recommendations, proofs, canaries)
+├── cost/                      # Cost catalog + analyzer
 ├── detectors/                 # 7 money-leak detectors + registry
-├── optimization/
-│   ├── engine.py              # Opportunity generation from waste reports
-│   ├── recommender.py         # V2: Recommendations with scoring and config generation
-│   ├── recommendation_store.py # V2: Lifecycle store with state machine
-│   └── replay.py              # Counterfactual replay framework
-├── api/
-│   ├── app.py                 # FastAPI factory + pipeline wiring
-│   └── routes/                # health, traces, dashboard, recommendations, experiments
-└── cli.py                     # CLI: serve, check-config, list-models
+├── evaluation/                # 6 quality evaluators + registry
+├── optimization/              # Engine, recommender, replay, validator, canary manager
+├── autopilot/                 # Policy engine, router, verifier, recovery selector
+├── auth/                      # API key middleware
+├── api/                       # FastAPI app + routes
+└── cli.py                     # CLI entry point
+
+dashboard/                     # React SPA (Vite + Tailwind)
+tests/                         # 103 tests
+docs/                          # Infrastructure plan
 ```
 
 ## Roadmap
@@ -169,5 +253,5 @@ src/agent_optimize/
 | V0 - Observe | ✅ Done | Accurate trace and cost accounting |
 | V1 - Diagnose | ✅ Done | High-precision opportunities with evidence |
 | V2 - Optimize | ✅ Done | Teams can prioritize fixes by business value |
-| V3 - Prove | Planned | Savings validated before production |
-| V4 - Autopilot | Planned | Automated changes within quality/SLA/risk constraints |
+| V3 - Prove | ✅ Done | Savings validated before production |
+| V4 - Autopilot | ✅ Done | Automated changes within quality/SLA/risk constraints |
