@@ -1,0 +1,40 @@
+# Multi-stage production build
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+COPY pyproject.toml README.md ./
+COPY src/ src/
+RUN pip install --no-cache-dir --prefix=/install .
+
+# Production image
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy installed packages
+COPY --from=builder /install /usr/local
+
+# Copy app source (for uvicorn factory reload)
+COPY src/ src/
+COPY config.example.yaml config.yaml
+
+# Create data directory for SQLite
+RUN mkdir -p /data
+
+# Non-root user
+RUN useradd -r -s /bin/false appuser && chown -R appuser:appuser /data
+USER appuser
+
+ENV AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db \
+    AGENTOPTIMIZE_LOG_FORMAT=json \
+    AGENTOPTIMIZE_LOG_LEVEL=info \
+    AGENTOPTIMIZE_API_KEY_REQUIRED=false \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+
+CMD ["python", "-m", "uvicorn", "agent_optimize.api.app:create_app", \
+     "--host", "0.0.0.0", "--port", "8080", "--factory"]

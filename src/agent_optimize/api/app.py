@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -27,9 +28,26 @@ from agent_optimize.optimization.engine import OptimizationEngine
 from agent_optimize.optimization.recommendation_store import RecommendationStore
 from agent_optimize.optimization.replay import ReplayEngine
 from agent_optimize.optimization.validator import CanaryManager, SavingsValidator
-from agent_optimize.warehouse.store import TraceWarehouse
 
 logger = structlog.get_logger()
+
+
+def _create_warehouse(config: AppConfig):
+    """Create trace warehouse — SQLite for production, in-memory for dev."""
+    db_path = os.environ.get("AGENTOPTIMIZE_DB_PATH", "")
+
+    if db_path:
+        from agent_optimize.storage.database import Database
+        from agent_optimize.storage.trace_store import SqliteTraceStore
+
+        db = Database(db_path)
+        logger.info("storage.sqlite", path=db_path)
+        return SqliteTraceStore(db), db
+    else:
+        from agent_optimize.warehouse.store import TraceWarehouse
+
+        logger.info("storage.memory")
+        return TraceWarehouse(retention_hours=config.warehouse.retention_hours), None
 
 
 class AppState:
@@ -37,7 +55,8 @@ class AppState:
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        self.warehouse = TraceWarehouse(retention_hours=config.warehouse.retention_hours)
+        # Storage — SQLite or in-memory depending on environment
+        self.warehouse, self.db = _create_warehouse(config)
         self.cost_catalog = CostCatalog(config.cost_catalog)
         self.cost_analyzer = CostAnalyzer(self.cost_catalog)
         self.detector_registry = create_default_registry(
@@ -52,7 +71,7 @@ class AppState:
         self.savings_validator = SavingsValidator(self.evaluator_registry)
         self.canary_manager = CanaryManager(self.savings_validator)
         self.proof_store: dict = {}  # proof_id -> SavingsProof
-        # V4: Autopilot — dynamic routing, adaptive verification, recovery
+        # V4: Autopilot
         self.policy_engine = PolicyEngine()
         self.model_router = ModelRouter()
         self.adaptive_verifier = AdaptiveVerifier()
@@ -73,7 +92,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info(
         "app.started",
-        warehouse_backend=config.warehouse.backend,
+        version="0.4.0",
+        warehouse_backend="sqlite" if state.db else "memory",
         detectors=len(state.detector_registry.list_detectors()),
         evaluators=len(state.evaluator_registry.list_evaluators()),
         providers=state.cost_catalog.list_providers(),
@@ -124,14 +144,27 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS for dashboard frontend
+    # CORS
+    cors_origins = os.environ.get("AGENTOPTIMIZE_CORS_ORIGINS", "*")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins.split(","),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Auth middleware (optional — off by default for local dev)
+    from agent_optimize.auth.middleware import ApiKeyManager, AuthMiddleware, is_auth_required
+
+    if is_auth_required():
+        from agent_optimize.storage.database import Database
+
+        db_path = os.environ.get("AGENTOPTIMIZE_DB_PATH", ":memory:")
+        db = Database(db_path)
+        key_manager = ApiKeyManager(db)
+        app.add_middleware(AuthMiddleware, key_manager=key_manager, required=True)
+        logger.info("auth.enabled")
 
     # Mount routes — imported here to avoid circular imports
     from agent_optimize.api.routes import (
@@ -148,12 +181,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(otlp_router)
     app.include_router(traces.router)
     app.include_router(dashboard.router)
-    # V2 routes
     app.include_router(recommendations.router)
     app.include_router(experiments.router)
-    # V3 routes
     app.include_router(validation.router)
-    # V4 routes
     app.include_router(autopilot.router)
 
     return app
