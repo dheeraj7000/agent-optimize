@@ -1,4 +1,4 @@
-"""Event bus and webhook dispatcher with HMAC signing and async retry."""
+"""Webhook system with validated destinations, HMAC signatures and tenant routing."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class WebhookConfig(BaseModel):
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("Webhook URLs must use HTTPS and cannot include credentials")
         host = parsed.hostname.lower().rstrip(".")
-        if host in {"localhost", "localhost.localdomain"} or host.endswith(".localhost") or host.endswith(".local"):
+        if host == "localhost" or host.endswith((".localhost", ".local")):
             raise ValueError("Local webhook destinations are not allowed")
         return value
 
@@ -80,7 +80,7 @@ def _sign_payload(payload: str, secret: str) -> str:
 
 
 class WebhookDispatcher:
-    """Tenant-aware async webhook dispatcher with retry and HMAC signing."""
+    """Async dispatcher that preserves registrations and enforces tenant routing."""
 
     def __init__(self, max_retries: int = 3) -> None:
         self._webhooks: dict[str, WebhookConfig] = {}
@@ -100,49 +100,45 @@ class WebhookDispatcher:
 
     def list_webhooks(self, tenant_id: str | None = None) -> list[WebhookConfig]:
         hooks = list(self._webhooks.values())
-        return [h for h in hooks if h.tenant_id == tenant_id] if tenant_id is not None else hooks
+        return [hook for hook in hooks if hook.tenant_id == tenant_id] if tenant_id is not None else hooks
 
     def list_deliveries(self, webhook_id: str | None = None, limit: int = 50) -> list[WebhookDelivery]:
         deliveries = self._deliveries
         if webhook_id:
-            deliveries = [d for d in deliveries if d.webhook_id == webhook_id]
+            deliveries = [delivery for delivery in deliveries if delivery.webhook_id == webhook_id]
         return list(reversed(deliveries[-limit:]))
 
     async def dispatch(self, event: WebhookEvent, webhook_id: str | None = None) -> list[WebhookDelivery]:
-        """Deliver only to the event tenant's hooks; optionally target one hook."""
-        matching = [
-            w for w in self._webhooks.values()
-            if w.active and (event.tenant_id is None or w.tenant_id == event.tenant_id)
-            and (webhook_id is None or w.webhook_id == webhook_id)
-            and self._matches(w, event)
-        ]
-        deliveries = []
-        for webhook in matching:
-            delivery = await self._send(webhook, event)
+        """Send to active matching hooks; scoped events only reach their own tenant."""
+        matching = [hook for hook in self._webhooks.values()
+                    if hook.active and (event.tenant_id is None or hook.tenant_id == event.tenant_id)
+                    and (webhook_id is None or hook.webhook_id == webhook_id)
+                    and self._matches(hook, event)]
+        deliveries: list[WebhookDelivery] = []
+        for hook in matching:
+            delivery = await self._send(hook, event)
             self._deliveries.append(delivery)
             deliveries.append(delivery)
         return deliveries
 
     async def _send(self, webhook: WebhookConfig, event: WebhookEvent) -> WebhookDelivery:
-        payload_str = json.dumps({"event_id": event.event_id, "event_type": event.event_type,
-                                  "timestamp": event.timestamp.isoformat(), "payload": event.payload}, default=str)
+        body = json.dumps({"event_id": event.event_id, "event_type": event.event_type,
+                           "timestamp": event.timestamp.isoformat(), "payload": event.payload}, default=str)
         headers = {"Content-Type": "application/json"}
         if webhook.secret:
-            headers["X-AgentOptimize-Signature"] = _sign_payload(payload_str, webhook.secret)
+            headers["X-AgentOptimize-Signature"] = _sign_payload(body, webhook.secret)
         delivery = WebhookDelivery(webhook_id=webhook.webhook_id, event_id=event.event_id, url=webhook.url)
         for attempt in range(1, self._max_retries + 1):
             delivery.attempts = attempt
             try:
-                # Prevent redirects to private targets. The URL validator requires HTTPS;
-                # redirect following is disabled so an allowed URL cannot bounce to localhost.
                 async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-                    resp = await client.post(webhook.url, content=payload_str, headers=headers)
-                delivery.status_code = resp.status_code
-                delivery.success = 200 <= resp.status_code < 300
+                    response = await client.post(webhook.url, content=body, headers=headers)
+                delivery.status_code = response.status_code
+                delivery.success = 200 <= response.status_code < 300
                 if delivery.success:
                     delivery.delivered_at = datetime.now(tz=UTC)
                     return delivery
-                delivery.last_error = f"HTTP {resp.status_code}"
+                delivery.last_error = f"HTTP {response.status_code}"
             except Exception as exc:
                 delivery.last_error = str(exc)
             if attempt < self._max_retries:
@@ -157,7 +153,7 @@ class WebhookDispatcher:
 
 
 class EventBus:
-    """Central event bus that routes events to webhook dispatcher."""
+    """Central event bus with in-memory event log and webhook fan-out."""
 
     def __init__(self, dispatcher: WebhookDispatcher) -> None:
         self._dispatcher = dispatcher
