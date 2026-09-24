@@ -1,4 +1,4 @@
-"""FastAPI application factory and global state management."""
+"""FastAPI application factory with pluggable storage, auth, and feature routes."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def _create_warehouse(config: AppConfig):
 
 
 class AppState:
-    """Holds all shared application state — warehouse, analyzers, detectors, etc."""
+    """Holds shared application services and repositories."""
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -94,8 +94,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     config = load_config()
     state = AppState(config)
     set_state(state)
-    normalizer = TraceNormalizer(capture_content=config.privacy.capture_prompts)
-    set_normalizer(normalizer)
+    set_normalizer(TraceNormalizer(capture_content=config.privacy.capture_prompts))
     set_trace_callback(_on_trace_ingested)
     logger.info(
         "app.started", version="0.4.0", warehouse_backend="sqlite" if state.db else "memory",
@@ -120,11 +119,9 @@ async def _on_trace_ingested(trace: NormalizedTrace) -> None:
     trace = state.cost_analyzer.analyze_trace(trace)
     await state.warehouse.store(trace)
     report = state.detector_registry.analyze_trace(trace)
-    logger.info(
-        "pipeline.processed", trace_id=trace.trace_id, cost=trace.total_cost,
-        waste=report.total_waste, efficiency=f"{report.efficiency_score:.0%}",
-        detections=report.detections_count,
-    )
+    logger.info("pipeline.processed", trace_id=trace.trace_id, cost=trace.total_cost,
+                waste=report.total_waste, efficiency=f"{report.efficiency_score:.0%}",
+                detections=report.detections_count)
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
@@ -142,21 +139,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    origins_value = os.environ.get("AGENTOPTIMIZE_CORS_ORIGINS", "")
-    cors_origins = [origin.strip() for origin in origins_value.split(",") if origin.strip()]
-    if "*" in cors_origins and auth_required:
+    origins = [o.strip() for o in os.environ.get("AGENTOPTIMIZE_CORS_ORIGINS", "").split(",") if o.strip()]
+    if "*" in origins and auth_required:
         raise RuntimeError("Wildcard CORS origins are not allowed when authentication is enabled")
-    if cors_origins:
-        app.add_middleware(
-            CORSMiddleware, allow_origins=cors_origins, allow_credentials=False,
-            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type", "Accept"],
-        )
+    if origins:
+        app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
+                          allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+                          allow_headers=["Authorization", "Content-Type", "Accept"])
 
     if auth_required:
         from agent_optimize.storage.database import Database
-        db = Database(os.environ["AGENTOPTIMIZE_DB_PATH"])
-        app.add_middleware(AuthMiddleware, key_manager=ApiKeyManager(db), required=True)
+        auth_db = Database(os.environ["AGENTOPTIMIZE_DB_PATH"])
+        app.add_middleware(AuthMiddleware, key_manager=ApiKeyManager(auth_db), required=True)
         logger.info("auth.enabled")
 
     from agent_optimize.api.routes import (
@@ -165,17 +159,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
     from agent_optimize.metrics.prometheus import MetricsMiddleware
     app.add_middleware(MetricsMiddleware)
-    app.include_router(health.router)
-    app.include_router(otlp_router)
-    app.include_router(traces.router)
-    app.include_router(dashboard.router)
-    app.include_router(recommendations.router)
-    app.include_router(experiments.router)
-    app.include_router(validation.router)
-    app.include_router(autopilot.router)
-    app.include_router(webhooks.router)
-    app.include_router(metrics_route.router)
-    app.include_router(onboarding_route.router)
+    for route in (health.router, otlp_router, traces.router, dashboard.router,
+                  recommendations.router, experiments.router, validation.router,
+                  autopilot.router, webhooks.router, metrics_route.router, onboarding_route.router):
+        app.include_router(route)
     _mount_dashboard(app)
     return app
 
@@ -186,15 +173,15 @@ def _mount_dashboard(app: FastAPI) -> None:
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
-    candidates = [
-        Path(__file__).parent.parent.parent.parent / "dashboard" / "dist",
-        Path("/app/dashboard/dist"), Path("dashboard/dist"),
-    ]
-    dist_dir = next((p for p in candidates if p.is_dir()), None)
+    candidates = [Path(__file__).parent.parent.parent.parent / "dashboard" / "dist",
+                  Path("/app/dashboard/dist"), Path("dashboard/dist")]
+    dist_dir = next((candidate for candidate in candidates if candidate.is_dir()), None)
     if dist_dir is None:
         logger.info("dashboard.not_found", hint="Run 'npm run build' in dashboard/")
         return
-    app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="dashboard-assets")
+    assets = dist_dir / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="dashboard-assets")
     index_html = dist_dir / "index.html"
 
     @app.get("/{path:path}", include_in_schema=False)
