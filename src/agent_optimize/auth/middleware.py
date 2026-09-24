@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -94,6 +95,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
             denied = self._resource_belongs_to_other_tenant(request, tenant_id)
             if denied:
                 return Response(status_code=404, content='{"detail":"Not found"}', media_type="application/json")
+
+            # Tenant is also accepted in the recommendation-generation JSON body.
+            # Replace any caller-supplied value before the route parses the request.
+            if request.url.path == "/api/recommendations/generate" and request.method == "POST":
+                try:
+                    body = await request.json()
+                    if not isinstance(body, dict):
+                        return Response(status_code=400, content='{"detail":"Invalid JSON body"}', media_type="application/json")
+                    body["tenant_id"] = tenant_id
+                    encoded = json.dumps(body).encode()
+                    sent = False
+                    async def receive():
+                        nonlocal sent
+                        if sent:
+                            return {"type": "http.request", "body": b"", "more_body": False}
+                        sent = True
+                        return {"type": "http.request", "body": encoded, "more_body": False}
+                    request._receive = receive
+                except (ValueError, TypeError):
+                    return Response(status_code=400, content='{"detail":"Invalid JSON body"}', media_type="application/json")
 
         return await call_next(request)
 
