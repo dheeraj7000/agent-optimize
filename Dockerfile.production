@@ -11,24 +11,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy installed packages
 COPY --from=builder /install /usr/local
-
-# Copy app source (for uvicorn factory reload)
 COPY src/ src/
 COPY config.example.yaml config.yaml
 
-# Create data directory for SQLite
 RUN mkdir -p /data
-
-# Non-root user
 RUN useradd -r -s /bin/false appuser && chown -R appuser:appuser /data
 USER appuser
 
-ENV AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db \
+ENV AGENTOPTIMIZE_ENV=production \
+    AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db \
     AGENTOPTIMIZE_LOG_FORMAT=json \
     AGENTOPTIMIZE_LOG_LEVEL=info \
-    AGENTOPTIMIZE_API_KEY_REQUIRED=false \
+    AGENTOPTIMIZE_API_KEY_REQUIRED=true \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080

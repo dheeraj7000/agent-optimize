@@ -1,24 +1,20 @@
-/** Headline metric card for the executive dashboard. */
-export default function StatCard({ label, value, sub, icon: Icon, color = 'green' }) {
-  const colors = {
-    green: 'bg-green-50 text-green-600',
-    blue: 'bg-blue-50 text-blue-600',
-    amber: 'bg-amber-50 text-amber-600',
-    red: 'bg-red-50 text-red-600',
-    gray: 'bg-gray-50 text-gray-600',
-  }
+const tones = {
+  green: 'metric-icon-green',
+  blue: 'metric-icon-blue',
+  amber: 'metric-icon-amber',
+  red: 'metric-icon-red',
+  gray: 'metric-icon-gray',
+}
+
+export default function StatCard({ label, value, sub, icon: Icon, color = 'green', featured = false }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-gray-500">{label}</p>
-        {Icon && (
-          <div className={`p-2 rounded-lg ${colors[color] || colors.green}`}>
-            <Icon size={18} />
-          </div>
-        )}
+    <article className={`metric-card ${featured ? 'metric-card-featured' : ''}`}>
+      <div className="metric-card-top">
+        <p className="metric-label">{label}</p>
+        {Icon && <span className={`metric-icon ${tones[color] || tones.green}`}><Icon size={16} strokeWidth={1.9} /></span>}
       </div>
-      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-1 text-sm text-gray-500">{sub}</p>}
-    </div>
+      <p className="metric-value">{value}</p>
+      {sub && <p className="metric-sub">{sub}</p>}
+    </article>
   )
 }
