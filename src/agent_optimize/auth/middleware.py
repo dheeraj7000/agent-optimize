@@ -1,4 +1,4 @@
-"""API key authentication middleware and tenant boundary enforcement."""
+"""API key authentication and tenant boundary enforcement."""
 
 from __future__ import annotations
 
@@ -58,12 +58,12 @@ class ApiKeyManager:
         rows = self._db.execute(
             "SELECT key_hash, name, active, created_at FROM api_keys WHERE tenant_id = ?", (tenant_id,),
         )
-        return [{"key_prefix": r["key_hash"][:8] + "...", "name": r["name"],
-                 "active": bool(r["active"]), "created_at": r["created_at"]} for r in rows]
+        return [{"key_prefix": row["key_hash"][:8] + "...", "name": row["name"],
+                 "active": bool(row["active"]), "created_at": row["created_at"]} for row in rows]
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Validate bearer keys and enforce tenant boundaries for API resources."""
+    """Authenticate API calls and apply authenticated tenant identity to requests."""
 
     def __init__(self, app, key_manager: ApiKeyManager | None = None, required: bool = True) -> None:
         super().__init__(app)
@@ -71,56 +71,66 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._required = required
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/docs"):
+        path = request.url.path
+        # Keep health/docs and the dashboard SPA public; protect API and OTLP endpoints.
+        if (path in _PUBLIC_PATHS or path.startswith(("/docs", "/assets"))
+                or path == "/favicon.svg" or not path.startswith(("/api", "/v1"))):
             return await call_next(request)
 
-        tenant_id = None
+        tenant_id = "default"
         if self._required:
             auth_header = request.headers.get("authorization", "")
             token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
             tenant_id = self._key_manager.validate_key(token) if token and self._key_manager else None
             if not tenant_id:
-                return Response(status_code=401, content='{"error":"Missing or invalid API key"}', media_type="application/json")
+                return Response(status_code=401, content='{"error":"Missing or invalid API key"}',
+                                media_type="application/json")
         request.state.tenant_id = tenant_id
         request.state.authenticated = self._required
 
-        if self._required:
-            # Never let a caller select another tenant through query parameters.
-            pairs = [(k, v) for k, v in parse_qsl(request.scope.get("query_string", b"").decode(), keep_blank_values=True)
-                     if k != "tenant_id"]
-            if request.url.path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations")):
-                pairs.append(("tenant_id", tenant_id))
-                request.scope["query_string"] = urlencode(pairs).encode()
+        if not self._required:
+            return await call_next(request)
 
-            denied = self._resource_belongs_to_other_tenant(request, tenant_id)
-            if denied:
-                return Response(status_code=404, content='{"detail":"Not found"}', media_type="application/json")
+        # Client query parameters cannot select the tenant.
+        if path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations")):
+            params = [(key, value) for key, value in parse_qsl(
+                request.scope.get("query_string", b"").decode(), keep_blank_values=True
+            ) if key != "tenant_id"]
+            params.append(("tenant_id", tenant_id))
+            request.scope["query_string"] = urlencode(params).encode()
 
-            # Tenant is also accepted in the recommendation-generation JSON body.
-            # Replace any caller-supplied value before the route parses the request.
-            if request.url.path == "/api/recommendations/generate" and request.method == "POST":
-                try:
-                    body = await request.json()
-                    if not isinstance(body, dict):
-                        return Response(status_code=400, content='{"detail":"Invalid JSON body"}', media_type="application/json")
-                    body["tenant_id"] = tenant_id
-                    encoded = json.dumps(body).encode()
-                    sent = False
-                    async def receive():
-                        nonlocal sent
-                        if sent:
-                            return {"type": "http.request", "body": b"", "more_body": False}
-                        sent = True
-                        return {"type": "http.request", "body": encoded, "more_body": False}
-                    request._receive = receive
-                except (ValueError, TypeError):
-                    return Response(status_code=400, content='{"detail":"Invalid JSON body"}', media_type="application/json")
+        # Guard ID-based trace/recommendation/experiment endpoints. Route handlers
+        # repeat checks for trace and recommendation records before returning data.
+        if self._resource_belongs_to_other_tenant(request, tenant_id):
+            return Response(status_code=404, content='{"detail":"Not found"}', media_type="application/json")
+
+        # Generate recommendations accepts tenant_id in its JSON body; override it.
+        if path == "/api/recommendations/generate" and request.method == "POST":
+            try:
+                body = await request.json()
+                if not isinstance(body, dict):
+                    return Response(status_code=400, content='{"detail":"Invalid JSON body"}',
+                                    media_type="application/json")
+                body["tenant_id"] = tenant_id
+                encoded = json.dumps(body).encode()
+                sent = False
+
+                async def receive():
+                    nonlocal sent
+                    if sent:
+                        return {"type": "http.request", "body": b"", "more_body": False}
+                    sent = True
+                    return {"type": "http.request", "body": encoded, "more_body": False}
+
+                request._receive = receive
+            except (ValueError, TypeError):
+                return Response(status_code=400, content='{"detail":"Invalid JSON body"}',
+                                media_type="application/json")
 
         return await call_next(request)
 
     @staticmethod
     def _resource_belongs_to_other_tenant(request: Request, tenant_id: str) -> bool:
-        """Check ownership for path-based trace, recommendation, and experiment IDs."""
         match = re.match(r"^/api/(traces|recommendations|experiments)/([^/]+)", request.url.path)
         if not match:
             return False
@@ -137,14 +147,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             experiment = state.replay_engine.get_experiment(resource_id)
             if experiment is None:
                 return False
-            traces = [state.warehouse.get_trace(tid) for tid in experiment.trace_ids]
-            return not traces or any(t is None or t.tenant_id != tenant_id for t in traces)
+            traces = [state.warehouse.get_trace(trace_id) for trace_id in experiment.trace_ids]
+            return not traces or any(trace is None or trace.tenant_id != tenant_id for trace in traces)
         except (RuntimeError, AssertionError):
             return False
 
 
 def is_auth_required() -> bool:
-    """Require authentication by default in production; opt out only for local dev."""
+    """Require authentication by default in production; allow local development opt-out."""
     value = os.environ.get("AGENTOPTIMIZE_API_KEY_REQUIRED")
     if value is not None:
         return value.lower() in ("true", "1", "yes")
