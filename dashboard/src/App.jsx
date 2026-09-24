@@ -5,6 +5,7 @@ import Recommendations from './pages/Recommendations'
 import Traces from './pages/Traces'
 import Validation from './pages/Validation'
 import Autopilot from './pages/Autopilot'
+import Quickstart from './pages/Quickstart'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="traces" element={<Traces />} />
         <Route path="validation" element={<Validation />} />
         <Route path="autopilot" element={<Autopilot />} />
+        <Route path="quickstart" element={<Quickstart />} />
       </Route>
     </Routes>
   )
