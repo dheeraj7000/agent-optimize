@@ -64,6 +64,11 @@ kbd { display: inline-flex; align-items: center; gap: 3px; border: 1px solid #e6
 .badge-success { background: #eaf3ed; color: #32704b; } .badge-info { background: #edf3f6; color: #55788d; } .badge-warning { background: #f8f1e5; color: #927239; } .badge-danger { background: #f8ece9; color: #9e5b50; } .badge-neutral { background: #f0f2f0; color: #68766d; }
 .table-empty { display: grid; min-height: 150px; place-content: center; justify-items: center; border: 1px dashed #dce5dd; border-radius: 10px; background: #fbfcfb; padding: 20px; text-align: center; } .content-panel .table-empty { border: 0; border-radius: 0; }
 .table-empty-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid #e3eae4; border-radius: 8px; color: #73867a; } .table-empty strong { margin-top: 10px; color: #4b5a50; font-size: 11px; font-weight: 650; } .table-empty p { max-width: 340px; margin: 5px 0 0; color: #8c9890; font-size: 10px; line-height: 1.5; }
+.loading-state { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 10px; color: #738178; font-size: 11px; }
+.loading-indicator { width: 16px; height: 16px; border: 2px solid #dce8df; border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-message { display: flex; align-items: center; gap: 9px; border: 1px solid #f0d8d3; border-radius: 9px; background: #fcf6f5; padding: 12px 14px; color: #8d5146; font-size: 11px; }
+.error-indicator { width: 7px; height: 7px; border-radius: 50%; background: #b96c5d; }
 .page-wrap .space-y-6 > div:first-child h1 { color: var(--ink); font-size: 23px; font-weight: 680; letter-spacing: -.6px; } .page-wrap .space-y-6 > div:first-child p { color: var(--muted); font-size: 11px; }
 .page-wrap button:not(.icon-button) { transition: transform .15s ease, filter .15s ease; } .page-wrap button:not(.icon-button):hover { filter: brightness(.96); } .page-wrap button:not(.icon-button):active { transform: translateY(1px); }
 @media (max-width: 1000px) { .sidebar { width: 220px; } .main-panel { margin-left: 220px; } .topbar { padding: 0 24px; } .page-wrap { padding: 27px 24px 16px; } .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
