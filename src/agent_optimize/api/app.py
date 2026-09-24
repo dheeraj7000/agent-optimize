@@ -1,4 +1,4 @@
-"""FastAPI application factory and global state management."""
+"""FastAPI application factory with persistent storage, auth, and product routes."""
 
 from __future__ import annotations
 
@@ -35,21 +35,20 @@ logger = structlog.get_logger()
 
 
 def _create_warehouse(config: AppConfig):
-    """Create trace warehouse — SQLite for production, in-memory for dev."""
-    db_path = os.environ.get("AGENTOPTIMIZE_DB_PATH", "")
-    if db_path:
-        from agent_optimize.storage.database import Database
+    """Create trace storage for PostgreSQL, SQLite, or in-memory deployments."""
+    from agent_optimize.storage.backend import create_storage_backend
+    warehouse, db = create_storage_backend()
+    if warehouse is not None:
+        return warehouse, db
+    if db is not None:
         from agent_optimize.storage.trace_store import SqliteTraceStore
-        db = Database(db_path)
-        logger.info("storage.sqlite", path=db_path)
         return SqliteTraceStore(db), db
     from agent_optimize.warehouse.store import TraceWarehouse
-    logger.info("storage.memory")
     return TraceWarehouse(retention_hours=config.warehouse.retention_hours), None
 
 
 class AppState:
-    """Holds all shared application state — warehouse, analyzers, detectors, etc."""
+    """Shared app services and repositories."""
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -94,11 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     config = load_config()
     state = AppState(config)
     set_state(state)
-    normalizer = TraceNormalizer(capture_content=config.privacy.capture_prompts)
-    set_normalizer(normalizer)
+    set_normalizer(TraceNormalizer(capture_content=config.privacy.capture_prompts))
     set_trace_callback(_on_trace_ingested)
     logger.info(
-        "app.started", version="0.4.0", warehouse_backend="sqlite" if state.db else "memory",
+        "app.started", version="0.4.0", warehouse_backend="persistent" if state.db else "memory",
         detectors=len(state.detector_registry.list_detectors()),
         evaluators=len(state.evaluator_registry.list_evaluators()),
         providers=state.cost_catalog.list_providers(), autopilot_mode=state.policy_engine.status.mode.value,
@@ -120,6 +118,9 @@ async def _on_trace_ingested(trace: NormalizedTrace) -> None:
     trace = state.cost_analyzer.analyze_trace(trace)
     await state.warehouse.store(trace)
     report = state.detector_registry.analyze_trace(trace)
+    from agent_optimize.metrics.prometheus import record_trace_ingested, set_traces_stored
+    record_trace_ingested(trace.total_cost, report.total_waste)
+    set_traces_stored(state.warehouse.trace_count)
     logger.info("pipeline.processed", trace_id=trace.trace_id, cost=trace.total_cost,
                 waste=report.total_waste, efficiency=f"{report.efficiency_score:.0%}",
                 detections=report.detections_count)
@@ -128,30 +129,39 @@ async def _on_trace_ingested(trace: NormalizedTrace) -> None:
 def create_app(config: AppConfig | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     from agent_optimize.auth.middleware import ApiKeyManager, AuthMiddleware, is_auth_required
+    from agent_optimize.auth.oauth import load_oidc_config
+
     auth_required = is_auth_required()
-    if auth_required and not os.environ.get("AGENTOPTIMIZE_DB_PATH"):
-        raise RuntimeError("AGENTOPTIMIZE_DB_PATH must be set when API key authentication is enabled")
+    db_path = os.environ.get("AGENTOPTIMIZE_DB_PATH", "")
+    db_url = os.environ.get("AGENTOPTIMIZE_DB_URL", "")
+    if auth_required and not (db_path or db_url):
+        raise RuntimeError("Configure AGENTOPTIMIZE_DB_PATH or AGENTOPTIMIZE_DB_URL when auth is enabled")
 
     app = FastAPI(
         title="AgentOptimize",
         description="AI-agent FinOps: waste attribution, counterfactual optimization, and quality preservation.",
         version="0.4.0", lifespan=lifespan,
     )
-    origins_value = os.environ.get("AGENTOPTIMIZE_CORS_ORIGINS", "")
-    cors_origins = [origin.strip() for origin in origins_value.split(",") if origin.strip()]
-    if "*" in cors_origins and auth_required:
+    origins = [value.strip() for value in os.environ.get("AGENTOPTIMIZE_CORS_ORIGINS", "").split(",") if value.strip()]
+    if "*" in origins and auth_required:
         raise RuntimeError("Wildcard CORS origins are not allowed when authentication is enabled")
-    if cors_origins:
+    if origins:
         app.add_middleware(
-            CORSMiddleware, allow_origins=cors_origins, allow_credentials=False,
+            CORSMiddleware, allow_origins=origins, allow_credentials=False,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type", "Accept"],
         )
     if auth_required:
-        from agent_optimize.storage.database import Database
-        db = Database(os.environ["AGENTOPTIMIZE_DB_PATH"])
-        app.add_middleware(AuthMiddleware, key_manager=ApiKeyManager(db), required=True)
-        logger.info("auth.enabled")
+        from agent_optimize.storage.backend import create_storage_backend
+        _, auth_db = create_storage_backend()
+        if auth_db is None:
+            raise RuntimeError("Configured storage backend did not provide an auth database")
+        oidc_config = load_oidc_config()
+        app.add_middleware(
+            AuthMiddleware, key_manager=ApiKeyManager(auth_db), required=True,
+            oidc_config=oidc_config,
+        )
+        logger.info("auth.enabled", oidc_configured=bool(oidc_config.issuer_url and oidc_config.client_id))
 
     from agent_optimize.api.routes import (
         autopilot, dashboard, experiments, health, metrics_route, onboarding_route,
@@ -159,16 +169,16 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
     from agent_optimize.metrics.prometheus import MetricsMiddleware
     app.add_middleware(MetricsMiddleware)
-    for route in (health.router, otlp_router, traces.router, dashboard.router, recommendations.router,
-                  experiments.router, validation.router, autopilot.router, webhooks.router,
-                  metrics_route.router, onboarding_route.router):
+    for route in (health.router, otlp_router, traces.router, dashboard.router,
+                  recommendations.router, experiments.router, validation.router,
+                  autopilot.router, webhooks.router, metrics_route.router, onboarding_route.router):
         app.include_router(route)
     _mount_dashboard(app)
     return app
 
 
 def _mount_dashboard(app: FastAPI) -> None:
-    """Mount the React dashboard build as static files with SPA fallback."""
+    """Mount dashboard static files and SPA fallback if a build exists."""
     from pathlib import Path
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
@@ -178,7 +188,9 @@ def _mount_dashboard(app: FastAPI) -> None:
     if dist_dir is None:
         logger.info("dashboard.not_found", hint="Run 'npm run build' in dashboard/")
         return
-    app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="dashboard-assets")
+    assets = dist_dir / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="dashboard-assets")
     index_html = dist_dir / "index.html"
 
     @app.get("/{path:path}", include_in_schema=False)
