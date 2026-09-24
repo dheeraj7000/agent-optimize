@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import secrets
@@ -74,7 +73,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/docs"):
             return await call_next(request)
 
-        tenant_id = "default"
+        tenant_id = None
         if self._required:
             auth_header = request.headers.get("authorization", "")
             token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
@@ -82,44 +81,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not tenant_id:
                 return Response(status_code=401, content='{"error":"Missing or invalid API key"}', media_type="application/json")
         request.state.tenant_id = tenant_id
+        request.state.authenticated = self._required
 
-        # Query-string tenant filters are never client-authoritative.
-        pairs = [(k, v) for k, v in parse_qsl(request.scope.get("query_string", b"").decode(), keep_blank_values=True)
-                 if k != "tenant_id"]
-        if request.url.path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations")):
-            pairs.append(("tenant_id", tenant_id))
-            request.scope["query_string"] = urlencode(pairs).encode()
-
-        # Reject cross-tenant resource IDs before handlers can read or mutate them.
         if self._required:
+            # Never let a caller select another tenant through query parameters.
+            pairs = [(k, v) for k, v in parse_qsl(request.scope.get("query_string", b"").decode(), keep_blank_values=True)
+                     if k != "tenant_id"]
+            if request.url.path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations")):
+                pairs.append(("tenant_id", tenant_id))
+                request.scope["query_string"] = urlencode(pairs).encode()
+
             denied = self._resource_belongs_to_other_tenant(request, tenant_id)
             if denied:
                 return Response(status_code=404, content='{"detail":"Not found"}', media_type="application/json")
-
-        # Recommendation generation takes tenant_id in its JSON body; force it to the key owner.
-        if self._required and request.url.path == "/api/recommendations/generate" and request.method == "POST":
-            try:
-                body = await request.json()
-                body["tenant_id"] = tenant_id
-                encoded = json.dumps(body).encode()
-                sent = False
-                async def receive():
-                    nonlocal sent
-                    if sent:
-                        return {"type": "http.request", "body": b"", "more_body": False}
-                    sent = True
-                    return {"type": "http.request", "body": encoded, "more_body": False}
-                request._receive = receive
-            except (ValueError, TypeError):
-                return Response(status_code=400, content='{"detail":"Invalid JSON body"}', media_type="application/json")
 
         return await call_next(request)
 
     @staticmethod
     def _resource_belongs_to_other_tenant(request: Request, tenant_id: str) -> bool:
-        """Check ownership for detail/action routes whose identifiers are path-based."""
-        path = request.url.path
-        match = re.match(r"^/api/(traces|recommendations|experiments)/([^/]+)", path)
+        """Check ownership for path-based trace, recommendation, and experiment IDs."""
+        match = re.match(r"^/api/(traces|recommendations|experiments)/([^/]+)", request.url.path)
         if not match:
             return False
         resource, resource_id = match.groups()
@@ -136,8 +117,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if experiment is None:
                 return False
             traces = [state.warehouse.get_trace(tid) for tid in experiment.trace_ids]
-            return any(t is None or t.tenant_id != tenant_id for t in traces)
-        except RuntimeError:
+            return not traces or any(t is None or t.tenant_id != tenant_id for t in traces)
+        except (RuntimeError, AssertionError):
             return False
 
 
