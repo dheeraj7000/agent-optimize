@@ -81,11 +81,13 @@ kbd { display: inline-flex; align-items: center; gap: 3px; border: 1px solid #e6
 .overview-page { display: grid; gap: 18px; }
 .section-kicker { display: flex; align-items: center; gap: 7px; color: #748178; font-size: 10px; font-weight: 650; letter-spacing: .35px; }
 .section-kicker svg { color: var(--green); }
+.section-window { color: #9ca69f; font-weight: 450; letter-spacing: 0; }
 .overview-hero { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 18px; overflow: hidden; border: 1px solid #234832; border-radius: 13px; background: #193b2b; padding: 22px 25px; color: white; }
 .overview-hero::after { position: absolute; top: -80px; right: 14%; width: 230px; height: 230px; border: 1px solid rgb(255 255 255 / 8%); border-radius: 50%; box-shadow: 0 0 0 28px rgb(255 255 255 / 3%), 0 0 0 60px rgb(255 255 255 / 2%); content: ''; pointer-events: none; }
 .hero-label { display: flex; align-items: center; gap: 7px; color: #c1d7c6; font-size: 10px; }
 .hero-label svg { color: #9bd0a8; }
 .hero-value { margin-top: 7px; color: #fff; font-size: clamp(28px, 3.3vw, 39px); font-weight: 650; letter-spacing: -1.4px; line-height: 1.1; }
+.hero-period { color: #c1d5c6; font-size: 18px; font-weight: 450; letter-spacing: -.4px; }
 .hero-note { margin-top: 8px; color: #b2c8b8; font-size: 10px; }
 .hero-side { z-index: 1; display: flex; min-width: 170px; flex-direction: column; align-items: flex-end; justify-content: space-between; text-align: right; }
 .hero-side-label { color: #bdd0c2; font-size: 9px; }
@@ -105,7 +107,7 @@ kbd { display: inline-flex; align-items: center; gap: 3px; border: 1px solid #e6
 .metric-icon-gray { background: #f0f2f0; color: #6d7971; }
 .metric-value { overflow: hidden; margin: 9px 0 0; color: #24352b; font-size: 22px; font-weight: 650; letter-spacing: -.65px; text-overflow: ellipsis; white-space: nowrap; }
 .metric-sub { margin: 4px 0 0; color: #8d9891; font-size: 9px; }
-.metric-inline { display: flex; flex-wrap: wrap; gap: 20px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 12px 15px; }
+.metric-inline { display: flex; flex-wrap: wrap; gap: 14px 20px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 12px 15px; }
 .metric-inline-item { display: flex; align-items: center; gap: 7px; color: #829087; font-size: 10px; }
 .metric-inline-item svg { color: #7a9582; }
 .metric-inline-item strong { color: #39483e; font-size: 11px; font-weight: 650; }
@@ -123,7 +125,18 @@ kbd { display: inline-flex; align-items: center; gap: 3px; border: 1px solid #e6
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-row-clickable { cursor: pointer; transition: background .15s ease; }
 .data-row-clickable:hover { background: #f8fbf8; }
+.opportunity-cell { display: grid; min-width: 180px; gap: 4px; }
+.opportunity-cell strong { color: #35453b; font-size: 10px; font-weight: 650; }
+.opportunity-cell span { max-width: 330px; overflow: hidden; color: #8a958e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.table-money { color: #325b41; font-weight: 650; }
+.status-badge { display: inline-flex; align-items: center; border-radius: 5px; padding: 4px 7px; font-size: 9px; font-weight: 620; line-height: 1; text-transform: capitalize; white-space: nowrap; }
+.badge-success { background: #eaf3ed; color: #32704b; }
+.badge-info { background: #edf3f6; color: #55788d; }
+.badge-warning { background: #f8f1e5; color: #927239; }
+.badge-danger { background: #f8ece9; color: #9e5b50; }
+.badge-neutral { background: #f0f2f0; color: #68766d; }
 .table-empty { display: grid; min-height: 150px; place-content: center; justify-items: center; border: 1px dashed #dce5dd; border-radius: 10px; background: #fbfcfb; padding: 20px; text-align: center; }
+.content-panel .table-empty { border: 0; border-radius: 0; }
 .table-empty-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid #e3eae4; border-radius: 8px; color: #73867a; }
 .table-empty strong { margin-top: 10px; color: #4b5a50; font-size: 11px; font-weight: 650; }
 .table-empty p { max-width: 340px; margin: 5px 0 0; color: #8c9890; font-size: 10px; line-height: 1.5; }
