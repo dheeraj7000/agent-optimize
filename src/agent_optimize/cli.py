@@ -124,5 +124,44 @@ def list_models(config_path: str | None) -> None:
             )
 
 
+@main.command()
+@click.option("--tenant", required=True, help="Tenant ID (e.g. customer-acme)")
+@click.option("--name", default="", help="Descriptive label for this key")
+@click.option("--db-path", default=None, help="Path to SQLite database")
+def create_key(tenant: str, name: str, db_path: str | None) -> None:
+    """Generate a new API key for a tenant."""
+    from agent_optimize.auth.middleware import ApiKeyManager
+    from agent_optimize.storage.database import Database
+
+    path = db_path or os.environ.get("AGENTOPTIMIZE_DB_PATH", "./data/agentoptimize.db")
+    db = Database(path)
+    mgr = ApiKeyManager(db)
+    raw_key = mgr.create_key(tenant_id=tenant, name=name)
+    click.echo(f"Created API key for tenant '{tenant}':")
+    click.echo(f"  {raw_key}")
+    click.echo("\nStore this key safely; it cannot be retrieved again.")
+
+
+@main.command()
+@click.option("--tenant", required=True, help="Tenant ID")
+@click.option("--db-path", default=None, help="Path to SQLite database")
+def list_keys(tenant: str, db_path: str | None) -> None:
+    """List API keys for a tenant."""
+    from agent_optimize.auth.middleware import ApiKeyManager
+    from agent_optimize.storage.database import Database
+
+    path = db_path or os.environ.get("AGENTOPTIMIZE_DB_PATH", "./data/agentoptimize.db")
+    db = Database(path)
+    mgr = ApiKeyManager(db)
+    keys = mgr.list_keys(tenant)
+    if not keys:
+        click.echo(f"No API keys found for tenant '{tenant}'.")
+        return
+    click.echo(f"API keys for tenant '{tenant}':")
+    for k in keys:
+        status = "active" if k["active"] else "revoked"
+        click.echo(f"  [{status}] {k['key_prefix']} ({k['name']}) - created {k['created_at']}")
+
+
 if __name__ == "__main__":
     main()

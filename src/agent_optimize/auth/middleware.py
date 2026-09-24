@@ -94,8 +94,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._required = required
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Skip auth for public paths
-        if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/docs"):
+        path = request.url.path
+        # Skip auth for public paths, docs, assets, and frontend SPA routes
+        if (
+            path in _PUBLIC_PATHS
+            or path.startswith("/docs")
+            or path.startswith("/assets")
+            or path == "/favicon.svg"
+            or (not path.startswith("/api") and not path.startswith("/v1"))
+        ):
             return await call_next(request)
 
         # Skip auth if not required (local dev)

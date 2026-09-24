@@ -1,45 +1,70 @@
-/** Status / priority / confidence badges. */
+/** Status / priority / confidence badges styled with Supermemory aesthetic. */
 const styles = {
   // Status
-  pending: 'bg-yellow-100 text-yellow-700',
-  accepted: 'bg-blue-100 text-blue-700',
-  rejected: 'bg-red-100 text-red-700',
-  replaying: 'bg-purple-100 text-purple-700',
-  validated: 'bg-green-100 text-green-700',
-  deployed: 'bg-emerald-100 text-emerald-700',
-  verified: 'bg-green-200 text-green-800',
-  rolled_back: 'bg-red-200 text-red-800',
+  pending: 'bg-amber-50 text-amber-800 border-amber-200/80',
+  accepted: 'bg-sky-50 text-sky-800 border-sky-200/80',
+  rejected: 'bg-rose-50 text-rose-800 border-rose-200/80',
+  replaying: 'bg-indigo-50 text-indigo-800 border-indigo-200/80',
+  validated: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+  deployed: 'bg-teal-50 text-teal-800 border-teal-200/80',
+  verified: 'bg-emerald-100 text-emerald-900 border-emerald-300/90 font-semibold',
+  rolled_back: 'bg-rose-100 text-rose-900 border-rose-300/90',
+
   // Priority
-  critical: 'bg-red-100 text-red-700',
-  high: 'bg-orange-100 text-orange-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  low: 'bg-gray-100 text-gray-600',
-  // Confidence
-  // high: already mapped
+  critical: 'bg-rose-50 text-rose-800 border-rose-200/80',
+  high: 'bg-amber-50 text-amber-800 border-amber-200/80',
+  medium: 'bg-sky-50 text-sky-800 border-sky-200/80',
+  low: 'bg-slate-50 text-slate-700 border-slate-200/80',
+
   // Verdicts
-  pass: 'bg-green-100 text-green-700',
-  fail: 'bg-red-100 text-red-700',
-  warn: 'bg-amber-100 text-amber-700',
-  skip: 'bg-gray-100 text-gray-500',
+  pass: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+  fail: 'bg-rose-50 text-rose-800 border-rose-200/80',
+  warn: 'bg-amber-50 text-amber-800 border-amber-200/80',
+  skip: 'bg-slate-50 text-slate-500 border-slate-200/80',
+
   // Autopilot
-  off: 'bg-gray-100 text-gray-500',
-  suggest: 'bg-blue-100 text-blue-700',
-  supervised: 'bg-yellow-100 text-yellow-700',
-  autonomous: 'bg-green-100 text-green-700',
+  off: 'bg-slate-50 text-slate-500 border-slate-200/80',
+  suggest: 'bg-sky-50 text-sky-800 border-sky-200/80',
+  supervised: 'bg-amber-50 text-amber-800 border-amber-200/80',
+  autonomous: 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-900 border-emerald-300/80',
+
   // Canary
-  running: 'bg-blue-100 text-blue-700',
-  healthy: 'bg-green-100 text-green-700',
-  degraded: 'bg-amber-100 text-amber-700',
-  regressed: 'bg-red-100 text-red-700',
-  completed: 'bg-green-200 text-green-800',
+  running: 'bg-sky-50 text-sky-800 border-sky-200/80',
+  healthy: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+  degraded: 'bg-amber-50 text-amber-800 border-amber-200/80',
+  regressed: 'bg-rose-50 text-rose-800 border-rose-200/80',
+  completed: 'bg-emerald-100 text-emerald-900 border-emerald-300/90',
+}
+
+const dotColors = {
+  validated: 'bg-emerald-500',
+  deployed: 'bg-teal-500',
+  verified: 'bg-emerald-500',
+  pass: 'bg-emerald-500',
+  healthy: 'bg-emerald-500',
+  completed: 'bg-emerald-500',
+  running: 'bg-sky-500 animate-pulse',
+  replaying: 'bg-indigo-500 animate-pulse',
+  autonomous: 'bg-emerald-500',
+  critical: 'bg-rose-500',
+  fail: 'bg-rose-500',
+  regressed: 'bg-rose-500',
+  rejected: 'bg-rose-500',
+  pending: 'bg-amber-500',
+  warn: 'bg-amber-500',
 }
 
 export default function Badge({ value, className = '' }) {
   if (!value) return null
-  const s = styles[value] || 'bg-gray-100 text-gray-600'
+  const s = styles[value] || 'bg-slate-50 text-slate-700 border-slate-200/80'
+  const dot = dotColors[value]
+
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s} ${className}`}>
-      {value.replace(/_/g, ' ')}
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono tracking-tight border ${s} ${className}`}
+    >
+      {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`}></span>}
+      <span>{String(value).replace(/_/g, ' ')}</span>
     </span>
   )
 }

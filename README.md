@@ -39,24 +39,68 @@ React Dashboard
 
 ## Quick Start
 
+### 1. Prerequisites
+- Python >= 3.11
+- Node.js >= 18 and npm
+
+### 2. Setup & Installation
+
 ```bash
-# Install
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install backend dependencies
 pip install -e ".[dev]"
 
-# Run the server (in-memory mode — no setup needed)
-agent-optimize serve
-
-# Dashboard at http://localhost:8080
-# API docs at http://localhost:8080/docs
-# OTLP endpoint at http://localhost:8080/v1/traces
+# Build the React dashboard frontend
+cd dashboard
+npm install
+npm run build
+cd ..
 ```
 
-### With persistent storage
+### 3. Run the Server
+
+```bash
+# Run server (in-memory mode — no setup needed)
+agent-optimize serve
+```
+
+The server hosts both the API and the React SPA:
+- **Dashboard / Web UI:** [http://localhost:8080](http://localhost:8080)
+- **API Documentation (Swagger):** [http://localhost:8080/docs](http://localhost:8080/docs)
+- **Health Check:** [http://localhost:8080/health](http://localhost:8080/health)
+- **OTLP Trace Ingestion:** `http://localhost:8080/v1/traces`
+
+### 4. Seed Demo Data (Optional)
+
+To explore the dashboard immediately with sample metrics, traces, and waste opportunities:
+
+```bash
+curl -X POST http://localhost:8080/api/onboarding/seed-demo \
+  -H "Content-Type: application/json" \
+  -d '{"count": 20}'
+```
+
+### Persistent Storage (Optional)
 
 ```bash
 # Use SQLite for traces, recommendations, proofs (survives restarts)
 export AGENTOPTIMIZE_DB_PATH=./data/agentoptimize.db
 agent-optimize serve
+```
+
+### Dashboard Development (Hot Reload)
+
+For active frontend development:
+
+```bash
+cd dashboard
+npm install
+npm run dev    # Hot reload at http://localhost:5173, proxies API to :8080
+npm run build  # Production build served by FastAPI
+cd ..
 ```
 
 ### With Docker
@@ -68,15 +112,6 @@ docker compose up
 # Production
 docker build -f Dockerfile.production -t agentoptimize .
 docker run -v data:/data -p 8080:8080 -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db agentoptimize
-```
-
-### Dashboard development
-
-```bash
-cd dashboard
-npm install
-npm run dev    # Hot reload at http://localhost:5173, proxies API to :8080
-npm run build  # Production build served by FastAPI
 ```
 
 ## API Overview (60 endpoints)

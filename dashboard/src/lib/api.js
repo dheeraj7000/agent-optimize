@@ -2,9 +2,32 @@
 
 const BASE = ''  // Same origin in production; proxied in dev
 
+function getAuthHeaders() {
+  if (typeof window === 'undefined') return {}
+  try {
+    const urlKey = new URLSearchParams(window.location.search).get('key')
+    if (urlKey) {
+      localStorage.setItem('agentoptimize_api_key', urlKey)
+      return { Authorization: `Bearer ${urlKey}` }
+    }
+    const storedKey = localStorage.getItem('agentoptimize_api_key')
+    if (storedKey) {
+      return { Authorization: `Bearer ${storedKey}` }
+    }
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+  return {}
+}
+
 async function request(path, options = {}) {
+  const authHeaders = getAuthHeaders()
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+      ...options.headers,
+    },
     ...options,
   })
   if (!res.ok) {
@@ -58,4 +81,13 @@ export const api = {
   recoveryStats: () => request('/api/autopilot/recover/stats'),
   decisions: (limit = 20) => request(`/api/autopilot/decisions?limit=${limit}`),
   policies: () => request('/api/autopilot/policies'),
+
+  // Onboarding & Setup
+  onboardingStatus: () => request('/api/onboarding/status'),
+  completeStep: (step_key) =>
+    request('/api/onboarding/complete-step', { method: 'POST', body: JSON.stringify({ step_key }) }),
+  seedDemo: (count = 20) =>
+    request('/api/onboarding/seed-demo', { method: 'POST', body: JSON.stringify({ count }) }),
+  sendTrace: (payload) =>
+    request('/v1/traces', { method: 'POST', body: JSON.stringify(payload) }),
 }

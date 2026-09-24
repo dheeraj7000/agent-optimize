@@ -54,27 +54,27 @@ export default function Recommendations() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200/70">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recommendations</h1>
-          <p className="text-gray-500 mt-1">Actionable optimizations ranked by business value</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Recommendations</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Counterfactual optimizations ranked by business value</p>
         </div>
         <button
           onClick={generate}
           disabled={generating}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 text-white rounded-lg hover:from-emerald-700 hover:to-sky-700 disabled:opacity-50 text-sm font-medium transition-all shadow-xs active:scale-[0.98]"
         >
-          <RefreshCw size={16} className={generating ? 'animate-spin' : ''} />
-          Generate
+          <RefreshCw size={15} className={generating ? 'animate-spin' : ''} />
+          {generating ? 'Analyzing traces…' : 'Generate Recommendations'}
         </button>
       </div>
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total" value={s.total || 0} icon={ListChecks} color="blue" />
-        <StatCard label="Identified Savings" value={fmt(s.total_identified_savings || 0)} color="amber" />
+        <StatCard label="Total Policies" value={s.total || 0} icon={ListChecks} color="blue" />
+        <StatCard label="Identified Savings" value={fmt(s.total_identified_savings || 0)} color="cyan" />
         <StatCard label="Accepted Savings" value={fmt(s.total_accepted_savings || 0)} color="green" />
-        <StatCard label="Verified Savings" value={fmt(s.total_verified_savings || 0)} color="green" />
+        <StatCard label="Verified In Prod" value={fmt(s.total_verified_savings || 0)} color="green" />
       </div>
 
       {/* Recommendations table */}
@@ -82,37 +82,43 @@ export default function Recommendations() {
         columns={columns}
         rows={(recs?.recommendations || []).map((r) => ({ ...r, id: r.recommendation_id }))}
         onRowClick={(row) => setSelected(row.recommendation_id)}
-        emptyMessage="No recommendations yet. Click Generate to analyze traces."
+        emptyMessage="No recommendations yet. Click 'Generate Recommendations' to analyze traces."
       />
 
       {/* Detail panel */}
       {selected && detail && !detailLoading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{detail.title}</h2>
-            <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-sm">
-              Close
+        <div className="bg-white/95 rounded-xl border border-slate-200/90 p-6 space-y-5 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <span className="font-mono text-xs text-slate-400">REC #{detail.recommendation_id?.slice(0, 8)}</span>
+              <h2 className="text-lg font-semibold text-slate-900 tracking-tight">{detail.title}</h2>
+            </div>
+            <button
+              onClick={() => setSelected(null)}
+              className="text-xs font-mono text-slate-400 hover:text-slate-700 px-2 py-1 rounded bg-slate-100/80 hover:bg-slate-200 transition-colors"
+            >
+              ✕ Close
             </button>
           </div>
-          <p className="text-gray-600 text-sm">{detail.description}</p>
+          <p className="text-slate-600 text-sm leading-relaxed">{detail.description}</p>
 
           {/* Impact */}
           {detail.impact && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500">Monthly Savings</p>
-                <p className="font-bold">{fmt(detail.impact.monthly_savings)}</p>
+              <div className="bg-slate-50/80 border border-slate-200/60 rounded-lg p-3">
+                <p className="text-[11px] font-mono uppercase text-slate-500">Monthly Savings</p>
+                <p className="font-mono font-bold text-emerald-700 text-base mt-0.5">{fmt(detail.impact.monthly_savings)}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500">Cost Reduction</p>
-                <p className="font-bold">{detail.impact.cost_reduction_pct}%</p>
+              <div className="bg-slate-50/80 border border-slate-200/60 rounded-lg p-3">
+                <p className="text-[11px] font-mono uppercase text-slate-500">Cost Reduction</p>
+                <p className="font-mono font-bold text-slate-900 text-base mt-0.5">{detail.impact.cost_reduction_pct}%</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500">Quality Impact</p>
-                <p className="font-bold">{(detail.impact.quality_delta * 100).toFixed(2)}%</p>
+              <div className="bg-slate-50/80 border border-slate-200/60 rounded-lg p-3">
+                <p className="text-[11px] font-mono uppercase text-slate-500">Quality Impact</p>
+                <p className="font-mono font-bold text-slate-900 text-base mt-0.5">{(detail.impact.quality_delta * 100).toFixed(2)}%</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500">Quality Risk</p>
+              <div className="bg-slate-50/80 border border-slate-200/60 rounded-lg p-3">
+                <p className="text-[11px] font-mono uppercase text-slate-500 mb-1">Quality Risk</p>
                 <Badge value={detail.impact.quality_risk} />
               </div>
             </div>
@@ -120,29 +126,54 @@ export default function Recommendations() {
 
           {/* Action items */}
           {detail.action_items?.length > 0 && (
-            <div>
-              <h3 className="font-medium text-sm text-gray-700 mb-2">Action Items</h3>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
+            <div className="bg-slate-50/60 border border-slate-200/60 rounded-lg p-4">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 mb-2">Prescribed Action Items</h3>
+              <ol className="list-decimal list-inside space-y-1.5 text-sm text-slate-700">
                 {detail.action_items.map((item, i) => <li key={i}>{item}</li>)}
               </ol>
             </div>
           )}
 
           {/* Lifecycle actions */}
-          <div className="flex gap-2 pt-2 border-t border-gray-100">
+          <div className="flex gap-2 pt-3 border-t border-slate-100">
             {detail.status === 'pending' && (
               <>
-                <button onClick={() => transition('accept')} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm">Accept</button>
-                <button onClick={() => transition('reject')} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm">Reject</button>
+                <button
+                  onClick={() => transition('accept')}
+                  className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-mono font-medium shadow-xs transition-colors"
+                >
+                  Accept Policy
+                </button>
+                <button
+                  onClick={() => transition('reject')}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-lg text-xs font-mono font-medium transition-colors"
+                >
+                  Reject
+                </button>
               </>
             )}
             {['accepted', 'validated'].includes(detail.status) && (
-              <button onClick={() => transition('deploy')} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm">Deploy</button>
+              <button
+                onClick={() => transition('deploy')}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-mono font-medium shadow-xs transition-all"
+              >
+                Deploy Configuration
+              </button>
             )}
             {detail.status === 'deployed' && (
               <>
-                <button onClick={() => transition('verify')} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm">Verify</button>
-                <button onClick={() => transition('rollback')} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm">Rollback</button>
+                <button
+                  onClick={() => transition('verify')}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-mono font-medium shadow-xs transition-colors"
+                >
+                  Verify Savings
+                </button>
+                <button
+                  onClick={() => transition('rollback')}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-lg text-xs font-mono font-medium transition-colors"
+                >
+                  Rollback
+                </button>
               </>
             )}
           </div>

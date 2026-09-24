@@ -35,45 +35,56 @@ export default function Validation() {
   if (error) return <ErrorMessage message={error} />
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Validation</h1>
-        <p className="text-gray-500 mt-1">Savings proofs, quality evaluators, and canary monitoring</p>
+    <div className="space-y-7">
+      <div className="pb-2 border-b border-slate-200/70">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Validation & Canary</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Counterfactual replay proofs, automated quality evaluators, and canary traffic monitors</p>
       </div>
 
       {/* Evaluators */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Quality Evaluators</h2>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Quality Evaluators</h2>
+          <span className="font-mono text-xs text-slate-400">({(evaluators?.evaluators || []).length} active)</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {(evaluators?.evaluators || []).map((e) => (
-            <div key={e.name} className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={16} className="text-green-600" />
-                <span className="font-medium text-sm">{e.name}</span>
+            <div key={e.name} className="bg-white/95 rounded-xl border border-slate-200/80 p-4 shadow-xs hover:border-slate-300 transition-all">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200/60">
+                  <ShieldCheck size={15} />
+                </div>
+                <span className="font-medium text-sm text-slate-900 tracking-tight">{e.name}</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">{e.description}</p>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">{e.description}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Proofs */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Savings Proofs</h2>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Savings Proofs</h2>
+          <span className="font-mono text-xs text-slate-400">({(proofs?.proofs || []).length})</span>
+        </div>
         <DataTable
           columns={proofCols}
           rows={(proofs?.proofs || []).map((p) => ({ ...p, id: p.proof_id }))}
-          emptyMessage="No proofs yet. Validate a replay experiment to generate a proof."
+          emptyMessage="No proofs yet. Validate a replay experiment to generate a mathematical proof."
         />
       </div>
 
       {/* Canaries */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Canary Deployments</h2>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Canary Deployments</h2>
+          <span className="font-mono text-xs text-slate-400">({(canaries?.canaries || []).length})</span>
+        </div>
         <DataTable
           columns={canaryCols}
           rows={(canaries?.canaries || []).map((c) => ({ ...c, id: c.canary_id }))}
-          emptyMessage="No canary deployments."
+          emptyMessage="No canary deployments active currently."
         />
       </div>
     </div>
