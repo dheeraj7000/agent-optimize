@@ -37,7 +37,7 @@ async def complete_step(body: CompleteStepRequest, tenant_id: str = "default") -
 
 
 @router.post("/seed-demo")
-async def seed_demo_data(body: SeedRequest) -> dict:
+async def seed_demo_data(body: SeedRequest, tenant_id: str = "default") -> dict:
     """Seed synthetic traces for demo/onboarding.
 
     Generates realistic OTel traces and ingests them through the normal pipeline.
@@ -72,8 +72,8 @@ async def seed_demo_data(body: SeedRequest) -> dict:
                 await _on_trace_callback(trace)
                 ingested += 1
 
-    # Mark onboarding step
+    # Mark onboarding step for the requesting tenant
     state = get_state()
-    state.onboarding.complete_step("default", "connect_traces")
+    state.onboarding.complete_step(tenant_id, "connect_traces")
 
     return {"ingested": ingested, "message": f"Seeded {ingested} demo traces"}

@@ -92,7 +92,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Client query parameters cannot select the tenant.
-        if path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations")):
+        if path.startswith(("/api/traces", "/api/dashboard", "/api/recommendations", "/api/onboarding")):
             params = [(key, value) for key, value in parse_qsl(
                 request.scope.get("query_string", b"").decode(), keep_blank_values=True
             ) if key != "tenant_id"]
