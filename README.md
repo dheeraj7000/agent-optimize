@@ -10,6 +10,28 @@ A framework-agnostic optimization layer for production AI agents. AgentOptimize 
 
 Tell companies exactly where their agentic AI systems are wasting money, quantify the waste, and recommend the lowest-risk optimization that preserves output quality, reliability, and functionality.
 
+## Dashboard
+
+The built-in dashboard ships with a dark-first glass UI (Geist typography, mint→cyan accents) covering Overview, Recommendations, Trace Explorer, Validation, Autopilot, and an interactive Quickstart.
+
+| Overview | Trace Explorer |
+|----------|----------------|
+| ![Overview — dark glass dashboard](docs/screenshots/overview.png) | ![Trace Explorer — waste attribution](docs/screenshots/traces.png) |
+| **Autopilot** | **Validation** |
+| ![Autopilot — policy modes and decisions](docs/screenshots/autopilot.png) | ![Validation — proofs and canaries](docs/screenshots/validation.png) |
+
+> **Adding screenshots:** run `agent-optimize serve`, open `http://localhost:8080`, press `⌘/Ctrl+Shift+4` (or your OS screenshot tool) on each page, and save the images as `docs/screenshots/<name>.png` (1920×1080 recommended). The table above will render them automatically once the files exist.
+
+## Interactive API Docs
+
+The server auto-generates full OpenAPI documentation for all 60 endpoints:
+
+- **Swagger UI:** [`/docs`](http://localhost:8080/docs) — interactive request/response explorer
+- **ReDoc:** [`/redoc`](http://localhost:8080/redoc) — reference-style rendering
+- **OpenAPI spec:** [`/openapi.json`](http://localhost:8080/openapi.json) — for client generation
+
+Run the server locally, then open [`http://localhost:8080/docs`](http://localhost:8080/docs) to try every endpoint from the browser.
+
 ## Architecture
 
 ```
@@ -83,6 +105,8 @@ curl -X POST http://localhost:8080/api/onboarding/seed-demo \
   -d '{"count": 20}'
 ```
 
+> Demo seeding is **disabled in production** — the endpoint returns 403 when `AGENTOPTIMIZE_ENV=production` or when API-key auth is required.
+
 ### Persistent Storage (Optional)
 
 ```bash
@@ -115,6 +139,8 @@ docker run -v data:/data -p 8080:8080 -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimi
 ```
 
 ## API Overview (60 endpoints)
+
+Browse all endpoints interactively at [`/docs`](http://localhost:8080/docs).
 
 ### V0 — Observe
 
@@ -216,6 +242,44 @@ Each recommendation includes:
 - **Adaptive verifier**: skip verification when risk is low and confidence is high
 - **Recovery selector**: learned fallback strategies that minimize cost-to-success
 
+## Security
+
+Authentication posture by environment:
+
+| Environment | Auth | Notes |
+|-------------|------|-------|
+| Local dev (`agent-optimize serve`) | Off by default | Zero-setup quickstart; unauthenticated boots are logged with a warning |
+| Production Docker image | **Required** (baked into `Dockerfile.production`) | |
+| Fly.io deploy | **Required** (set in `fly.toml`) | |
+| Any deployment with `AGENTOPTIMIZE_API_KEY_REQUIRED=true` | Required | Wildcard CORS is refused when auth is on |
+
+The dashboard shows a **security banner** whenever the server reports `auth_required: false` and no API key is configured — open the dashboard as `http://localhost:8080/?key=YOUR_KEY` to authenticate.
+
+### Generating API Keys
+
+```bash
+# Generate a key for a tenant (SQLite DB required when auth is on)
+agent-optimize create-key --tenant customer-acme --name "prod key"
+
+# List existing keys
+agent-optimize list-keys --tenant customer-acme
+```
+
+Then send the key with requests:
+
+```bash
+curl -H "Authorization: Bearer ao_live_..." http://your-host/api/traces
+```
+
+And configure your OpenTelemetry exporter:
+
+```python
+OTLPSpanExporter(
+    endpoint="http://your-host/v1/traces",
+    headers={"Authorization": "Bearer ao_live_..."},
+)
+```
+
 ## Configuration
 
 ```bash
@@ -226,6 +290,7 @@ cp config.example.yaml config.yaml
 
 ```bash
 AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db  # SQLite path (omit for in-memory)
+AGENTOPTIMIZE_ENV=production                   # Enables production security posture
 AGENTOPTIMIZE_API_KEY_REQUIRED=true            # Enable API key auth
 AGENTOPTIMIZE_LOG_FORMAT=json                  # json or console
 AGENTOPTIMIZE_LOG_LEVEL=info                   # debug, info, warning, error
@@ -237,9 +302,16 @@ AGENTOPTIMIZE_CORS_ORIGINS=*                   # Comma-separated origins
 ### Fly.io (~$2/month)
 
 ```bash
+# 1. Generate a production API key first (required: fly.toml enforces auth)
+export AGENTOPTIMIZE_DB_PATH=./data/agentoptimize.db
+agent-optimize create-key --tenant production
+
+# 2. Launch
 fly launch --copy-config --no-deploy
 fly volumes create agentoptimize_data --size 1
 fly deploy
+
+# 3. Configure your OTel exporters and dashboard access with the key
 ```
 
 ### Self-hosted ($0)
@@ -276,9 +348,9 @@ src/agent_optimize/
 ├── api/                       # FastAPI app + routes
 └── cli.py                     # CLI entry point
 
-dashboard/                     # React SPA (Vite + Tailwind)
+dashboard/                     # React SPA (Vite + Tailwind, dark-first glass UI)
 tests/                         # 103 tests
-docs/                          # Infrastructure plan
+docs/                          # Infrastructure plan + screenshots
 ```
 
 ## Roadmap
