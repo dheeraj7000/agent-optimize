@@ -20,6 +20,10 @@ function getAuthHeaders() {
   return {}
 }
 
+export function isAuthConfigured() {
+  return Boolean(getAuthHeaders().Authorization)
+}
+
 async function request(path, options = {}) {
   const authHeaders = getAuthHeaders()
   const res = await fetch(`${BASE}${path}`, {

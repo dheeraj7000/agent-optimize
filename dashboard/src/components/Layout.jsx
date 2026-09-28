@@ -4,6 +4,7 @@ import {
   ChevronDown, CircleDollarSign, Command, ExternalLink, LayoutDashboard,
   ListChecks, Menu, Search, ShieldCheck, Terminal, Zap,
 } from 'lucide-react'
+import SecurityBanner from './SecurityBanner'
 
 const nav = [
   { to: '/', icon: LayoutDashboard, label: 'Overview', group: 'Workspace' },
@@ -81,6 +82,7 @@ export default function Layout() {
             <button type="button" className="avatar topbar-avatar" aria-label="Account">AO</button>
           </div>
         </header>
+        <SecurityBanner />
         <div className="page-wrap">
           <div className="page-heading">
             <div><div className="eyebrow"><Zap size={12} /> AI AGENT FINOPS</div><h1>{pageTitle}</h1><p>{pageDescription}</p></div>
