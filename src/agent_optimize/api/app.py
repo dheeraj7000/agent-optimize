@@ -131,6 +131,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     auth_required = is_auth_required()
     if auth_required and not os.environ.get("AGENTOPTIMIZE_DB_PATH"):
         raise RuntimeError("AGENTOPTIMIZE_DB_PATH must be set when API key authentication is enabled")
+    if not auth_required:
+        logger.warning(
+            "auth.disabled",
+            hint="API is unauthenticated. Set AGENTOPTIMIZE_API_KEY_REQUIRED=true "
+                 "for any deployment reachable outside localhost.",
+        )
 
     app = FastAPI(
         title="AgentOptimize",

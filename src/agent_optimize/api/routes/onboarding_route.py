@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import os
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent_optimize.api.state import get_state
@@ -39,7 +41,18 @@ async def seed_demo_data(body: SeedRequest) -> dict:
     """Seed synthetic traces for demo/onboarding.
 
     Generates realistic OTel traces and ingests them through the normal pipeline.
+    Disabled outside development: when the environment is production or API-key
+    authentication is required, seeding would pollute production data.
     """
+    env = os.environ.get("AGENTOPTIMIZE_ENV", "development").lower()
+    from agent_optimize.auth.middleware import is_auth_required
+
+    if env in {"prod", "production"} or is_auth_required():
+        raise HTTPException(
+            status_code=403,
+            detail="Demo data seeding is disabled outside development",
+        )
+
     from agent_optimize.ingestion.otlp_receiver import _extract_spans_from_otlp, _normalizer, _on_trace_callback
     from agent_optimize.onboarding.service import generate_demo_traces
 
