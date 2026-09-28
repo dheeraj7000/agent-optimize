@@ -8,10 +8,11 @@ primary_region = "iad"
   dockerfile = "Dockerfile.production"
 
 [env]
+  AGENTOPTIMIZE_ENV = "production"
   AGENTOPTIMIZE_DB_PATH = "/data/agentoptimize.db"
   AGENTOPTIMIZE_LOG_FORMAT = "json"
   AGENTOPTIMIZE_LOG_LEVEL = "info"
-  AGENTOPTIMIZE_API_KEY_REQUIRED = "false"
+  AGENTOPTIMIZE_API_KEY_REQUIRED = "true"
   AGENTOPTIMIZE_PORT = "8080"
 
 [http_service]
