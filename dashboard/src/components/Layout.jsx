@@ -7,29 +7,29 @@ import {
 import SecurityBanner from './SecurityBanner'
 
 const nav = [
-  { to: '/', icon: LayoutDashboard, label: 'Overview', group: 'Workspace' },
-  { to: '/recommendations', icon: ListChecks, label: 'Recommendations', group: 'Workspace' },
-  { to: '/traces', icon: Activity, label: 'Trace explorer', group: 'Observe' },
-  { to: '/validation', icon: ShieldCheck, label: 'Validation', group: 'Observe' },
-  { to: '/autopilot', icon: Bot, label: 'Autopilot', group: 'Operate' },
-  { to: '/quickstart', icon: BookOpen, label: 'Quickstart & Docs', group: 'Operate' },
+  { to: '/app', icon: LayoutDashboard, label: 'Overview', group: 'Workspace' },
+  { to: '/app/recommendations', icon: ListChecks, label: 'Recommendations', group: 'Workspace' },
+  { to: '/app/traces', icon: Activity, label: 'Trace explorer', group: 'Observe' },
+  { to: '/app/validation', icon: ShieldCheck, label: 'Validation', group: 'Observe' },
+  { to: '/app/autopilot', icon: Bot, label: 'Autopilot', group: 'Operate' },
+  { to: '/app/quickstart', icon: BookOpen, label: 'Quickstart & Docs', group: 'Operate' },
 ]
 
 const titles = {
-  '/': ['Overview', 'Spend intelligence for your AI systems'],
-  '/recommendations': ['Recommendations', 'Prioritize savings with quality evidence'],
-  '/traces': ['Trace explorer', 'Inspect cost, latency, and agent behavior'],
-  '/validation': ['Validation', 'Prove savings without compromising quality'],
-  '/autopilot': ['Autopilot', 'Operate within your quality and risk guardrails'],
-  '/quickstart': ['Quickstart & Docs', 'Connect telemetry and start measuring AI spend'],
+  '/app': ['Overview', 'Spend intelligence for your AI systems'],
+  '/app/recommendations': ['Recommendations', 'Prioritize savings with quality evidence'],
+  '/app/traces': ['Trace explorer', 'Inspect cost, latency, and agent behavior'],
+  '/app/validation': ['Validation', 'Prove savings without compromising quality'],
+  '/app/autopilot': ['Autopilot', 'Operate within your quality and risk guardrails'],
+  '/app/quickstart': ['Quickstart & Docs', 'Connect telemetry and start measuring AI spend'],
 }
 
 function SidebarLink({ to, icon: Icon, label }) {
-  return <NavLink to={to} end={to === '/'} className={({ isActive }) =>
+  return <NavLink to={to} end={to === '/app'} className={({ isActive }) =>
     `nav-link ${isActive ? 'nav-link-active' : ''}`}>
     <Icon size={17} strokeWidth={1.8} />
     <span>{label}</span>
-    {to === '/autopilot' && <span className="nav-status-dot" aria-label="Autopilot status" />}
+    {to === '/app/autopilot' && <span className="nav-status-dot" aria-label="Autopilot status" />}
   </NavLink>
 }
 
