@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import MarketingHome from './pages/MarketingHome'
 import Overview from './pages/Overview'
 import Recommendations from './pages/Recommendations'
 import Traces from './pages/Traces'
@@ -10,7 +11,8 @@ import Quickstart from './pages/Quickstart'
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/" element={<MarketingHome />} />
+      <Route path="/app" element={<Layout />}>
         <Route index element={<Overview />} />
         <Route path="recommendations" element={<Recommendations />} />
         <Route path="traces" element={<Traces />} />
