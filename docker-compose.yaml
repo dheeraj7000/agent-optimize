@@ -1,12 +1,19 @@
 services:
   agent-optimize:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.production
     ports:
       - "8080:8080"
-    volumes:
-      - ./config.example.yaml:/app/config.yaml:ro
     environment:
       - PYTHONUNBUFFERED=1
+      # Set to 'production' and AGENTOPTIMIZE_API_KEY_REQUIRED=true for locked-down deployments
+      - AGENTOPTIMIZE_ENV=development
+      - AGENTOPTIMIZE_API_KEY_REQUIRED=false
+      - AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db
+    volumes:
+      - agent-data:/data
+      - ./config.example.yaml:/app/config.yaml:ro
     depends_on:
       - otel-collector
 
@@ -18,10 +25,6 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
 
-  # Demo: send synthetic traces for testing
-  # Uncomment to generate test data:
-  # synthetic-agent:
-  #   build: .
-  #   command: python -m agent_optimize.demo.generate
-  #   depends_on:
-  #     - agent-optimize
+volumes:
+  agent-data:
+

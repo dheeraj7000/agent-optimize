@@ -130,13 +130,19 @@ cd ..
 ### With Docker
 
 ```bash
-# Development (with OTel Collector sidecar)
-docker compose up
+# Option A: One-command launch with Docker Compose (includes OTel Collector)
+docker compose up -d
 
-# Production
+# Option B: Standalone container with persistent storage
 docker build -f Dockerfile.production -t agentoptimize .
-docker run -v data:/data -p 8080:8080 -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db agentoptimize
+docker run -d -p 8080:8080 -v agent-data:/data \
+  -e AGENTOPTIMIZE_DB_PATH=/data/agentoptimize.db \
+  -e AGENTOPTIMIZE_API_KEY_REQUIRED=false \
+  agentoptimize
 ```
+
+Once running, access the full web dashboard at [http://localhost:8080](http://localhost:8080) and send OpenTelemetry traces to `http://localhost:8080/v1/traces`.
+
 
 ## API Overview (60 endpoints)
 
