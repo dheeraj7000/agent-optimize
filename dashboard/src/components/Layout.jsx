@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity, ArrowUpRight, BadgeCheck, Bot, BookOpen, ChartNoAxesCombined,
   ChevronDown, CircleDollarSign, Command, ExternalLink, LayoutDashboard,
@@ -41,10 +41,10 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a href="/" className="brand-lockup" aria-label="AgentOptimize home">
+        <Link to="/" className="brand-lockup" aria-label="AgentOptimize home">
           <span className="brand-mark"><ChartNoAxesCombined size={19} strokeWidth={2.2} /></span>
           <span className="brand-wordmark">agent<span>optimize</span></span>
-        </a>
+        </Link>
         <div className="workspace-switcher">
           <span className="workspace-monogram">AO</span>
           <span className="workspace-copy"><strong>Agent workspace</strong><small>Production environment</small></span>

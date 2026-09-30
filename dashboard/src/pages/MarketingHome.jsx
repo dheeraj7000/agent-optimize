@@ -14,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import './MarketingHome.css'
 
 const features = [
@@ -47,10 +48,10 @@ export default function MarketingHome() {
   return (
     <div className="marketing-page">
       <header className="marketing-nav">
-        <a className="marketing-brand" href="/" aria-label="AgentOptimize home">
+        <Link className="marketing-brand" to="/" aria-label="AgentOptimize home">
           <span className="marketing-brand-mark"><Activity size={18} strokeWidth={2.4} /></span>
           <span>agent<span>optimize</span></span>
-        </a>
+        </Link>
         <button className="marketing-menu-button" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation">
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -58,6 +59,7 @@ export default function MarketingHome() {
           <a href="#product" onClick={() => setMenuOpen(false)}>Product</a>
           <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
           <a href="#integrations" onClick={() => setMenuOpen(false)}>Integrations</a>
+          <Link to="/app" onClick={() => setMenuOpen(false)}>Dashboard</Link>
           <a className="marketing-nav-cta" href="mailto:hello@agentoptimize.ai" onClick={() => setMenuOpen(false)}>Request a demo <ArrowRight size={15} /></a>
         </nav>
       </header>
@@ -104,7 +106,7 @@ export default function MarketingHome() {
         <section className="final-cta"><div className="marketing-eyebrow">READY TO OPTIMIZE?</div><h2>Your agents are already<br /><span>leaving money on the table.</span></h2><p>Find it before it becomes your next infrastructure bill.</p><a className="primary-button" href="mailto:hello@agentoptimize.ai?subject=AgentOptimize%20demo">Request a demo <ArrowRight size={17} /></a></section>
       </main>
 
-      <footer className="marketing-footer"><a className="marketing-brand" href="/"><span className="marketing-brand-mark"><Activity size={16} /></span><span>agent<span>optimize</span></span></a><span>Observe. Diagnose. Optimize. Prove.</span><div><a href="https://github.com/dheeraj7000/agent-optimize" target="_blank" rel="noreferrer">GitHub</a><a href="mailto:hello@agentoptimize.ai">Contact</a></div></footer>
+      <footer className="marketing-footer"><Link className="marketing-brand" to="/"><span className="marketing-brand-mark"><Activity size={16} /></span><span>agent<span>optimize</span></span></Link><span>Observe. Diagnose. Optimize. Prove.</span><div><a href="https://github.com/dheeraj7000/agent-optimize" target="_blank" rel="noreferrer">GitHub</a><a href="mailto:hello@agentoptimize.ai">Contact</a></div></footer>
     </div>
   )
 }
