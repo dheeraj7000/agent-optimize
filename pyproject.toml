@@ -58,6 +58,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+ignore = ["UP042"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -1,16 +1,14 @@
 """Tests for waste detectors — each detector must produce accurate, evidence-backed detections."""
 
 from agent_optimize.detectors import create_default_registry
-from agent_optimize.detectors.model_overprovisioning import ModelOverprovisioningDetector
+from agent_optimize.detectors.bad_routing import BadRoutingDetector
 from agent_optimize.detectors.context_duplication import ContextDuplicationDetector
+from agent_optimize.detectors.model_overprovisioning import ModelOverprovisioningDetector
+from agent_optimize.detectors.redundant_tools import RedundantToolsDetector
 from agent_optimize.detectors.retry_waste import RetryWasteDetector
 from agent_optimize.detectors.unnecessary_verification import UnnecessaryVerificationDetector
-from agent_optimize.detectors.redundant_tools import RedundantToolsDetector
-from agent_optimize.detectors.bad_routing import BadRoutingDetector
-from agent_optimize.detectors.serialization_waste import SerializationWasteDetector
 from agent_optimize.models.traces import SpanKind, SpanStatus
 from agent_optimize.models.waste import WasteCategory
-
 from tests.conftest import make_span, make_trace
 
 

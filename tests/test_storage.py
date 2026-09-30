@@ -1,12 +1,10 @@
 """Tests for SQLite persistence layer."""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
 
 from agent_optimize.auth.middleware import ApiKeyManager, generate_api_key, hash_key
 from agent_optimize.storage.database import Database
 from agent_optimize.storage.trace_store import SqliteTraceStore
-
 from tests.conftest import make_trace
 
 

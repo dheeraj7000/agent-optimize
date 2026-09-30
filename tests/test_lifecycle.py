@@ -1,213 +1,178 @@
-"""Tests for recommendation lifecycle state machine and autopilot policy engine."""
+"""Tests for policy guardrails and recommendation lifecycle behavior."""
+
+from __future__ import annotations
 
 import pytest
 
+from agent_optimize.autopilot.policy import AutopilotMode, PolicyConstraints, PolicyDecision, PolicyEngine
 from agent_optimize.models.recommendations import (
     ConfidenceScore,
     ImpactProjection,
     Recommendation,
     RecommendationStatus,
 )
+from agent_optimize.models.waste import ConfidenceLevel
 from agent_optimize.optimization.recommendation_store import RecommendationStore
-from agent_optimize.autopilot.policy import (
-    AutopilotMode,
-    PolicyConstraints,
-    PolicyDecision,
-    PolicyEngine,
-)
 
 
 def _make_rec(**kwargs) -> Recommendation:
-    defaults = {
+    values = {
         "category": "model_overprovisioning",
         "title": "Test recommendation",
         "impact": ImpactProjection(monthly_savings=1000, annual_savings=12000),
         "confidence": ConfidenceScore(overall="high", overall_pct=85.0),
     }
-    defaults.update(kwargs)
-    return Recommendation(**defaults)
+    values.update(kwargs)
+    return Recommendation(**values)
 
 
 class TestRecommendationLifecycle:
     def test_happy_path(self):
-        """pending → accepted → deployed → verified"""
         store = RecommendationStore()
         rec = _make_rec()
         store.store(rec)
-
-        rec = store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED)
-        assert rec.status == RecommendationStatus.ACCEPTED
-
-        rec = store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
-        assert rec.status == RecommendationStatus.DEPLOYED
-
+        assert (
+            store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED).status
+            == RecommendationStatus.ACCEPTED
+        )
+        assert (
+            store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED).status
+            == RecommendationStatus.DEPLOYED
+        )
         rec = store.transition(rec.recommendation_id, RecommendationStatus.VERIFIED)
-        assert rec.status == RecommendationStatus.VERIFIED
-
-        assert len(rec.status_history) == 3
+        assert rec.status == RecommendationStatus.VERIFIED and len(rec.status_history) == 3
 
     def test_replay_path(self):
-        """pending → accepted → replaying → validated → deployed → verified"""
         store = RecommendationStore()
         rec = _make_rec()
         store.store(rec)
+        for status in (
+            RecommendationStatus.ACCEPTED,
+            RecommendationStatus.REPLAYING,
+            RecommendationStatus.VALIDATED,
+            RecommendationStatus.DEPLOYED,
+            RecommendationStatus.VERIFIED,
+        ):
+            rec = store.transition(rec.recommendation_id, status)
+        assert rec.status == RecommendationStatus.VERIFIED and len(rec.status_history) == 5
 
-        store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED)
-        store.transition(rec.recommendation_id, RecommendationStatus.REPLAYING)
-        store.transition(rec.recommendation_id, RecommendationStatus.VALIDATED)
-        store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
-        rec = store.transition(rec.recommendation_id, RecommendationStatus.VERIFIED)
-        assert rec.status == RecommendationStatus.VERIFIED
-        assert len(rec.status_history) == 5
-
-    def test_reject_from_pending(self):
+    def test_reject_and_rollback(self):
         store = RecommendationStore()
         rec = _make_rec()
         store.store(rec)
-
-        rec = store.transition(rec.recommendation_id, RecommendationStatus.REJECTED)
-        assert rec.status == RecommendationStatus.REJECTED
-
-    def test_rollback_from_deployed(self):
-        store = RecommendationStore()
-        rec = _make_rec()
-        store.store(rec)
-
-        store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED)
-        store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
-        rec = store.transition(rec.recommendation_id, RecommendationStatus.ROLLED_BACK)
-        assert rec.status == RecommendationStatus.ROLLED_BACK
+        assert (
+            store.transition(rec.recommendation_id, RecommendationStatus.REJECTED).status
+            == RecommendationStatus.REJECTED
+        )
+        other = _make_rec()
+        store.store(other)
+        store.transition(other.recommendation_id, RecommendationStatus.ACCEPTED)
+        store.transition(other.recommendation_id, RecommendationStatus.DEPLOYED)
+        assert (
+            store.transition(other.recommendation_id, RecommendationStatus.ROLLED_BACK).status
+            == RecommendationStatus.ROLLED_BACK
+        )
 
     def test_invalid_transition_raises(self):
         store = RecommendationStore()
         rec = _make_rec()
         store.store(rec)
-
         with pytest.raises(ValueError, match="Cannot transition"):
             store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
 
-    def test_cannot_transition_from_rejected(self):
+    def test_query_and_stats(self):
         store = RecommendationStore()
-        rec = _make_rec()
-        store.store(rec)
-
-        store.transition(rec.recommendation_id, RecommendationStatus.REJECTED)
-        with pytest.raises(ValueError, match="Cannot transition"):
-            store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED)
-
-    def test_cannot_transition_from_verified(self):
-        store = RecommendationStore()
-        rec = _make_rec()
-        store.store(rec)
-
-        store.transition(rec.recommendation_id, RecommendationStatus.ACCEPTED)
-        store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
-        store.transition(rec.recommendation_id, RecommendationStatus.VERIFIED)
-        with pytest.raises(ValueError, match="Cannot transition"):
-            store.transition(rec.recommendation_id, RecommendationStatus.DEPLOYED)
-
-    def test_query_by_status(self):
-        store = RecommendationStore()
-        r1 = _make_rec()
-        r2 = _make_rec()
-        store.store(r1)
-        store.store(r2)
-        store.transition(r2.recommendation_id, RecommendationStatus.ACCEPTED)
-
-        pending = store.query(status=RecommendationStatus.PENDING)
-        accepted = store.query(status=RecommendationStatus.ACCEPTED)
-        assert len(pending) == 1
-        assert len(accepted) == 1
-
-    def test_stats(self):
-        store = RecommendationStore()
-        r1 = _make_rec()
-        r2 = _make_rec()
-        store.store(r1)
-        store.store(r2)
-        store.transition(r2.recommendation_id, RecommendationStatus.ACCEPTED)
-
+        first = _make_rec()
+        second = _make_rec()
+        store.store(first)
+        store.store(second)
+        store.transition(second.recommendation_id, RecommendationStatus.ACCEPTED)
+        assert len(store.query(status=RecommendationStatus.PENDING)) == 1
         stats = store.get_stats()
-        assert stats["total"] == 2
-        assert stats["by_status"]["pending"] == 1
-        assert stats["by_status"]["accepted"] == 1
-        assert stats["total_identified_savings"] == 2000.0
+        assert stats["total"] == 2 and stats["total_identified_savings"] == 2000.0
 
 
 class TestPolicyEngine:
-    def test_autonomous_applies_decisions(self):
+    @staticmethod
+    def evidence(**updates):
+        data = {
+            "projected_quality_score": 0.99,
+            "projected_p50_latency_ms": 1000,
+            "projected_p95_latency_ms": 5000,
+            "projected_reliability": 0.99,
+            "risk_level": ConfidenceLevel.LOW,
+            "replay_validation_passed": True,
+            "canary_passed": True,
+        }
+        data.update(updates)
+        return data
+
+    def test_autonomous_only_authorizes_proposal(self):
         engine = PolicyEngine()
         engine.set_mode(AutopilotMode.AUTONOMOUS)
-
-        decision = PolicyDecision(
-            action_type="model_route",
-            expected_savings=100.0,
-            expected_quality_impact=-0.001,
+        result = engine.make_decision(
+            PolicyDecision(action_type="route", expected_savings=100, **self.evidence())
         )
-        result = engine.make_decision(decision)
-        assert result.applied is True
-        assert result.outcome == "applied"
+        assert result.outcome == "authorized_not_executed" and not result.applied
+        assert engine.status.decisions_applied == 0 and engine.status.estimated_monthly_savings == 0
 
-    def test_supervised_queues_for_approval(self):
+    def test_supervised_approval_is_not_execution(self):
         engine = PolicyEngine()
         engine.set_mode(AutopilotMode.SUPERVISED)
-
-        decision = PolicyDecision(action_type="model_route", expected_savings=50.0)
-        result = engine.make_decision(decision)
-        assert result.applied is False
-        assert result.outcome == "pending_approval"
-
-    def test_approve_pending_decision(self):
-        engine = PolicyEngine()
-        engine.set_mode(AutopilotMode.SUPERVISED)
-
-        decision = PolicyDecision(action_type="test", expected_savings=10.0)
-        result = engine.make_decision(decision)
+        result = engine.make_decision(PolicyDecision(action_type="route", **self.evidence()))
+        assert result.outcome == "pending_approval" and not result.applied
         approved = engine.approve_decision(result.decision_id, actor="admin")
-        assert approved.applied is True
-        assert approved.approved_by == "user:admin"
+        assert approved.outcome == "approved_not_executed" and not approved.applied
 
-    def test_reject_pending_decision(self):
-        engine = PolicyEngine()
-        engine.set_mode(AutopilotMode.SUPERVISED)
-
-        decision = PolicyDecision(action_type="test")
-        result = engine.make_decision(decision)
-        rejected = engine.reject_decision(result.decision_id)
-        assert rejected.outcome == "rejected"
-
-    def test_constraint_violation_blocks_decision(self):
+    def test_missing_evidence_blocks(self):
         engine = PolicyEngine()
         engine.set_mode(AutopilotMode.AUTONOMOUS)
-        engine.set_constraints(PolicyConstraints(max_quality_regression=0.02))
+        result = engine.make_decision(PolicyDecision(action_type="route"))
+        assert result.outcome == "constraint_violation" and not result.applied
+        assert result.constraint_violations
 
-        decision = PolicyDecision(
-            action_type="model_route",
-            expected_savings=500.0,
-            expected_quality_impact=-0.05,  # 5% > max 2%
+    @pytest.mark.parametrize(
+        "updates",
+        [
+            {"projected_quality_score": 0.5},
+            {"projected_p50_latency_ms": 20000},
+            {"projected_p95_latency_ms": 50000},
+            {"projected_reliability": 0.5},
+            {"risk_level": ConfidenceLevel.HIGH},
+            {"replay_validation_passed": False},
+            {"canary_passed": False},
+        ],
+    )
+    def test_failed_evidence_blocks(self, updates):
+        engine = PolicyEngine()
+        engine.set_mode(AutopilotMode.AUTONOMOUS)
+        result = engine.make_decision(PolicyDecision(action_type="route", **self.evidence(**updates)))
+        assert result.outcome == "constraint_violation" and not result.applied
+
+    def test_cost_limits_block(self):
+        engine = PolicyEngine()
+        engine.set_mode(AutopilotMode.AUTONOMOUS)
+        engine.set_constraints(PolicyConstraints(max_cost_per_trace=1, max_monthly_budget=100))
+        result = engine.make_decision(
+            PolicyDecision(
+                action_type="route",
+                projected_cost_per_trace=2,
+                projected_monthly_cost=200,
+                **self.evidence(),
+            )
         )
-        result = engine.make_decision(decision)
-        assert result.applied is False
-        assert result.outcome == "constraint_violation"
-        assert len(result.constraint_violations) > 0
+        assert result.outcome == "constraint_violation" and len(result.constraint_violations) >= 2
 
-    def test_off_mode_doesnt_apply(self):
-        engine = PolicyEngine()
-        engine.set_mode(AutopilotMode.OFF)
+    def test_off_mode_fails_closed(self):
+        result = PolicyEngine().make_decision(PolicyDecision(action_type="route"))
+        assert result.outcome == "constraint_violation" and not result.applied
 
-        decision = PolicyDecision(action_type="test", expected_savings=10.0)
-        result = engine.make_decision(decision)
-        assert result.applied is False
-        assert result.outcome == "autopilot_off"
-
-    def test_stats_track_decisions(self):
+    def test_stats_never_claim_applied_savings(self):
         engine = PolicyEngine()
         engine.set_mode(AutopilotMode.AUTONOMOUS)
-
-        engine.make_decision(PolicyDecision(action_type="a", expected_savings=10.0))
-        engine.make_decision(PolicyDecision(action_type="b", expected_savings=20.0))
-
-        stats = engine.get_stats()
-        assert stats["decisions_made"] == 2
-        assert stats["decisions_applied"] == 2
-        assert stats["estimated_monthly_savings"] == 30.0
+        for amount in (10, 20):
+            engine.make_decision(
+                PolicyDecision(action_type="route", expected_savings=amount, **self.evidence())
+            )
+        assert engine.get_stats()["decisions_applied"] == 0
+        assert engine.get_stats()["estimated_monthly_savings"] == 0

@@ -4,13 +4,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from agent_optimize.models.traces import (
-    CostBreakdown,
-    NormalizedTrace,
-    SpanKind,
-    TokenUsage,
-)
-from agent_optimize.models.waste import WasteCategory, WasteDetection, WasteReport
 from agent_optimize.models.recommendations import (
     ConfidenceScore,
     ImpactProjection,
@@ -18,7 +11,12 @@ from agent_optimize.models.recommendations import (
     RecommendationPriority,
     RecommendationStatus,
 )
-
+from agent_optimize.models.traces import (
+    CostBreakdown,
+    NormalizedTrace,
+    TokenUsage,
+)
+from agent_optimize.models.waste import WasteCategory, WasteDetection, WasteReport
 from tests.conftest import make_span, make_trace
 
 

@@ -160,8 +160,16 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         logger.info("auth.enabled")
 
     from agent_optimize.api.routes import (
-        autopilot, dashboard, experiments, health, metrics_route, onboarding_route,
-        recommendations, traces, validation, webhooks,
+        autopilot,
+        dashboard,
+        experiments,
+        health,
+        metrics_route,
+        onboarding_route,
+        recommendations,
+        traces,
+        validation,
+        webhooks,
     )
     from agent_optimize.metrics.prometheus import MetricsMiddleware
     app.add_middleware(MetricsMiddleware)
@@ -176,6 +184,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 def _mount_dashboard(app: FastAPI) -> None:
     """Mount the React dashboard build as static files with SPA fallback."""
     from pathlib import Path
+
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
     candidates = [Path(__file__).parent.parent.parent.parent / "dashboard" / "dist",

@@ -1,6 +1,5 @@
 """API contract tests — verify endpoint shapes and status codes."""
 
-import json
 
 
 class TestHealthEndpoints:

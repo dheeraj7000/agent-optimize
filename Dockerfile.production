@@ -1,3 +1,11 @@
+FROM node:20-alpine AS dashboard-builder
+
+WORKDIR /app/dashboard
+COPY dashboard/package*.json ./
+RUN npm ci
+COPY dashboard/ ./
+RUN npm run build
+
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -10,6 +18,7 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY --from=builder /usr/local /usr/local
 COPY src/ src/
+COPY --from=dashboard-builder /app/dashboard/dist /app/dashboard/dist
 COPY config.example.yaml config.yaml
 RUN mkdir -p /data && useradd -r -s /bin/false appuser && chown -R appuser:appuser /data
 USER appuser

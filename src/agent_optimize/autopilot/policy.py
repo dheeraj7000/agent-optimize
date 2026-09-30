@@ -198,8 +198,10 @@ class PolicyEngine:
                 issues.append("Projected monthly cost exceeds the configured budget")
         if decision.risk_level is None:
             issues.append("A risk level is required")
-        elif decision.risk_level > c.max_risk_level:
-            issues.append("Risk level exceeds the configured maximum")
+        else:
+            risk_order = {ConfidenceLevel.LOW: 1, ConfidenceLevel.MEDIUM: 2, ConfidenceLevel.HIGH: 3}
+            if risk_order.get(decision.risk_level, 0) > risk_order.get(c.max_risk_level, 0):
+                issues.append("Risk level exceeds the configured maximum")
         if c.require_replay_validation and not decision.replay_validation_passed:
             issues.append("Replay validation is required and has not passed")
         if c.require_canary and not decision.canary_passed:
