@@ -269,13 +269,30 @@ export default function MarketingHome() {
                 <div>
                   <h4>Interactive In-App Quickstart Checklist</h4>
                   <p>
-                    Once booted, navigate to <code className="setup-inline-code">/app/quickstart</code> for guided onboarding. Click <strong>"Seed demo data"</strong> to populate 20+ realistic traces and see waste opportunities in 2 seconds.
+                    Once booted, navigate to{' '}
+                    <a
+                      href="http://localhost:8080/app/quickstart"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="setup-inline-code hover:underline"
+                    >
+                      http://localhost:8080/app/quickstart
+                    </a>{' '}
+                    for guided onboarding. Click <strong>"Seed demo data"</strong> to populate 20+ realistic traces and see waste opportunities in 2 seconds.
                   </p>
                 </div>
               </div>
               <div className="setup-interactive-actions">
-                <Link to="/app/quickstart" className="setup-guide-link">
+                <a
+                  href="http://localhost:8080/app/quickstart"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="setup-guide-link"
+                >
                   Open Quickstart Guide <ArrowRight size={15} />
+                </a>
+                <Link to="/app/quickstart" className="setup-preview-link">
+                  Web Preview
                 </Link>
               </div>
             </div>

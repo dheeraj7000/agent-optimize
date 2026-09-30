@@ -13,8 +13,14 @@ export default function Quickstart() {
   const [copiedSection, setCopiedSection] = useState(null)
   const [testTraceState, setTestTraceState] = useState({ loading: false, result: null, error: null })
   const [seeding, setSeeding] = useState(false)
+  const [localSteps, setLocalSteps] = useState({})
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
+  const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0'
+  )
+  const origin = isLocalhost ? window.location.origin : 'http://localhost:8080'
   const otlpEndpoint = `${origin}/v1/traces`
 
   const copyToClipboard = (text, key) => {
@@ -63,7 +69,20 @@ export default function Quickstart() {
       await api.completeStep('connect_traces')
       refetchOnboarding()
     } catch (err) {
-      setTestTraceState({ loading: false, result: null, error: err.message })
+      if (!isLocalhost) {
+        setTestTraceState({
+          loading: false,
+          result: {
+            traceId,
+            preview: true,
+            message: 'Synthetic trace validated in Web Preview mode. Boot locally with docker compose to ingest into SQLite/Postgres.',
+          },
+          error: null,
+        })
+        setLocalSteps((prev) => ({ ...prev, connect_traces: true }))
+      } else {
+        setTestTraceState({ loading: false, result: null, error: err.message })
+      }
     }
   }
 
@@ -74,6 +93,17 @@ export default function Quickstart() {
       await api.completeStep('connect_traces')
       await api.completeStep('view_dashboard')
       refetchOnboarding()
+    } catch (err) {
+      if (!isLocalhost) {
+        setLocalSteps((prev) => ({
+          ...prev,
+          connect_traces: true,
+          view_dashboard: true,
+          generate_recommendations: true,
+        }))
+      } else {
+        console.error('Failed to seed demo data', err)
+      }
     } finally {
       setSeeding(false)
     }
@@ -154,7 +184,7 @@ docker run -d \\
 agent-optimize create-key --tenant customer-acme --name "Production Trace Ingestion"`,
   }
 
-  const steps = onboarding?.steps || [
+  const defaultSteps = [
     { key: 'connect_traces', title: 'Connect Agent Traces', description: 'Send your first OTel traces to /v1/traces', completed: false },
     { key: 'view_dashboard', title: 'View Opportunity Dashboard', description: 'Analyze monthly AI spend and identified waste', completed: false },
     { key: 'generate_recommendations', title: 'Generate Recommendations', description: 'Run counterfactual waste detection algorithms', completed: false },
@@ -163,12 +193,42 @@ agent-optimize create-key --tenant customer-acme --name "Production Trace Ingest
     { key: 'configure_autopilot', title: 'Configure Autopilot Policy', description: 'Enable autonomous or supervised model routing', completed: false },
   ]
 
-  const completedCount = onboarding?.completed_count || 0
+  const rawSteps = onboarding?.steps || defaultSteps
+  const steps = rawSteps.map((s) => ({
+    ...s,
+    completed: s.completed || Boolean(localSteps[s.key]),
+  }))
+
+  const completedCount = steps.filter((s) => s.completed).length
   const totalCount = steps.length
   const pct = Math.round((completedCount / totalCount) * 100)
 
   return (
     <div className="space-y-8 max-w-5xl">
+      {/* Web Preview Banner if not running on localhost */}
+      {!isLocalhost && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-sky-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-slate-700">
+              <strong>Web Preview Mode</strong> — You are viewing the interactive Quickstart UI. Once your local container is running, open{' '}
+              <a href="http://localhost:8080/app/quickstart" target="_blank" rel="noreferrer" className="text-emerald-700 font-bold underline hover:text-emerald-900">
+                http://localhost:8080/app/quickstart
+              </a>{' '}
+              to persist live traces and run counterfactual replays.
+            </span>
+          </div>
+          <a
+            href="http://localhost:8080/app/quickstart"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-medium shadow-xs transition-colors shrink-0"
+          >
+            Open Local App (:8080) <ArrowRight size={13} />
+          </a>
+        </div>
+      )}
+
       {/* Header */}
       <div className="pb-3 border-b border-slate-200/70">
         <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-gradient-to-r from-emerald-50 to-sky-50 border border-emerald-200/80 text-[11px] font-mono text-emerald-900 mb-2">
